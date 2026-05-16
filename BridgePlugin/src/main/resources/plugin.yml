@@ -1,0 +1,17 @@
+name: BridgePlugin
+version: 1.0.0
+main: com.craftcms.bridge.BridgePlugin
+api-version: "1.13"
+description: CraftCMS bridge — links website purchases and bans to the Minecraft server
+author: CraftCMS
+
+commands:
+  cart:
+    description: Получить купленные товары
+    usage: /cart
+    permission: craftcms.cart
+
+permissions:
+  craftcms.cart:
+    description: Использовать команду /cart
+    default: true

@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(ui-ux-pro-max)",
+      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"gaming minecraft dark glassmorphism ecommerce cms enterprise\" --design-system -p \"CraftCMS Minecraft\" -f markdown)",
+      "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"gaming minecraft dark glassmorphism ecommerce cms enterprise\" --design-system -p \"CraftCMS Minecraft\" -f markdown)",
+      "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"animation page transition shop ecommerce\" --domain ux)",
+      "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"gaming react tailwind\" --stack react)",
+      "Bash(python .claude/skills/ui-ux-pro-max/scripts/search.py \"gaming minecraft server ecommerce shop minimal dark professional\" --design-system -p \"CraftCMS\" -f markdown)",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\admin\\\\Desktop\\\\CMSMinecraft\\\\backend\\\\uploads\\\\skin\" \"C:\\\\Users\\\\admin\\\\Desktop\\\\CMSMinecraft\\\\backend\\\\uploads\\\\cape\")",
+      "PowerShell(New-Item *)",
+      "Bash(npx tsc *)",
+      "Bash(del \"C:\\\\Users\\\\admin\\\\Desktop\\\\CMSMinecraft\\\\frontend\\\\src\\\\components\\\\shop\\\\CartModal.tsx\")",
+      "Bash(del \"C:\\\\Users\\\\admin\\\\Desktop\\\\CMSMinecraft\\\\frontend\\\\src\\\\store\\\\cartStore.ts\")",
+      "Bash(npm install *)",
+      "Bash(Get-ChildItem *)",
+      "Bash(xargs grep -l \"SpringApplication\\\\|@SpringBootApplication\")",
+      "Bash(npm --version)",
+      "Bash(npm run *)",
+      "Bash(python3 -c ' *)"
+    ]
+  }
+}

@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Color design tokens (RGB channels — supports Tailwind opacity modifiers) */
+:root {
+  --c-primary:   124 58 237;   /* #7c3aed */
+  --c-primary-h: 109 40 217;   /* #6d28d9 */
+  --c-bg:        10 10 15;     /* #0a0a0f */
+  --c-bg1:       15 15 22;     /* #0f0f16 */
+  --c-bg2:       21 21 30;     /* #15151e */
+  --c-bg3:       28 28 39;     /* #1c1c27 */
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type='number'] { -moz-appearance: textfield; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    @apply bg-c-bg text-c-text font-sans antialiased;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: rgb(var(--c-bg)); }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--c-bg3)); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-primary)); }
+
+  ::selection { background: rgb(var(--c-primary) / 0.3); }
+}
+
+@layer components {
+  /* Surface card */
+  .card {
+    @apply bg-c-bg1 border border-c-border rounded-xl;
+  }
+  .card-hover {
+    @apply card transition-colors duration-200;
+  }
+  .card-hover:hover {
+    background: rgb(var(--c-bg2));
+    border-color: rgba(255,255,255,0.12);
+  }
+
+  /* Input */
+  .input {
+    @apply w-full bg-c-bg2 border border-c-border rounded-lg px-4 py-3
+           text-c-text placeholder-c-t3 text-sm font-sans
+           focus:outline-none focus:border-c-primary focus:ring-0
+           transition-colors duration-150;
+  }
+
+  /* Divider */
+  .divider {
+    @apply w-full h-px bg-white/[0.06];
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,29 @@
+# Backend
+backend/target/
+backend/data/
+backend/*.log
+backend/.mvn/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# License Admin (Tauri) - ЭТО ГЛАВНОЕ
+license-admin/src-tauri/target/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.pdb
+*.rlib
+*.rmeta
+*.d
+*.exe

@@ -1,0 +1,77 @@
+package com.craftcms.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+@Entity
+@Table(name = "site_settings")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class SiteSettings {
+
+    @Id
+    @Builder.Default
+    private Long id = 1L;
+
+    @Builder.Default
+    private String siteName = "CraftCMS";
+
+    @Builder.Default
+    @Column(columnDefinition = "TEXT")
+    private String siteDescription = "Лучший Minecraft опыт. Уникальные режимы, магазин привилегий и активное сообщество.";
+
+    // optional — if set, used instead of the default icon in Navbar/Footer
+    private String logoUrl;
+
+    @Builder.Default
+    private String copyrightText = "Все права защищены.";
+
+    @Builder.Default
+    private String disclaimerText = "Not affiliated with Mojang Studios";
+
+    private String donateHeaderImageUrl;
+
+    @Builder.Default
+    private String siteUrl = "http://localhost:5173";
+
+    @Builder.Default
+    private boolean emailVerificationRequired = false;
+
+    @Builder.Default
+    @Column(columnDefinition = "TEXT")
+    private String banKickMessage = "§cВы заблокированы на этом сервере.\n§7Причина: §f{reason}";
+
+    @Builder.Default
+    private String bridgeApiKey = "change-me";
+
+    @Builder.Default
+    private String bridgeAllowedIp = "";
+
+    @Builder.Default
+    private String bridgeBackendUrl = "";
+
+    @Builder.Default
+    private String primaryColor = "#7c3aed";
+
+    @Builder.Default
+    private String bgColor = "#0a0a0f";
+
+    @Builder.Default
+    private String heroTitle = "Модовый проект нового уровня";
+
+    @Builder.Default
+    @Column(columnDefinition = "TEXT")
+    private String heroSubtitle = "Уникальная сборка модов, балансный геймплей и активное сообщество. Скачайте лаунчер и начните играть за несколько минут.";
+
+    // JSON array: [{title, links: [{label, href}]}]
+    @Builder.Default
+    @Column(columnDefinition = "TEXT")
+    private String footerColumnsJson = """
+            [
+              {"title":"Навигация","links":[{"label":"Главная","href":"/"},{"label":"Магазин","href":"/shop"},{"label":"Лаунчер","href":"/launcher"}]},
+              {"title":"Поддержка","links":[{"label":"Discord","href":"#"},{"label":"VK","href":"#"},{"label":"Правила","href":"#"},{"label":"Контакты","href":"#"}]}
+            ]""";
+}
