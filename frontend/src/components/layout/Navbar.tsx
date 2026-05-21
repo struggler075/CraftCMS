@@ -18,6 +18,7 @@ export default function Navbar() {
   const navigate = useNavigate()
   const { user, isAuthenticated, logout } = useAuthStore()
   const siteName = useSiteSettings((s) => s.settings.siteName)
+  const logoUrl = useSiteSettings((s) => s.settings.logoUrl)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -40,9 +41,13 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-6">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <div className="w-7 h-7 bg-c-primary rounded-md flex items-center justify-center">
-            <ShoppingBag className="w-4 h-4 text-white" />
-          </div>
+          {logoUrl ? (
+            <img src={logoUrl} alt={siteName} className="w-7 h-7 object-contain rounded-md" />
+          ) : (
+            <div className="w-7 h-7 bg-c-primary rounded-md flex items-center justify-center">
+              <ShoppingBag className="w-4 h-4 text-white" />
+            </div>
+          )}
           <span className="font-semibold text-sm text-c-text tracking-tight">{siteName}</span>
         </Link>
 

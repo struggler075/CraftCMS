@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Settings, Plus, Trash2, GripVertical, Check, ExternalLink, Upload, Mail, Server, Eye, EyeOff, Send, Copy, Plug, Palette, RotateCcw } from 'lucide-react'
-import { adminDonateApi, smtpApi, type SmtpSettings } from '../../services/api'
+import { Settings, Plus, Trash2, GripVertical, Check, ExternalLink, Upload, Mail, Server, Eye, EyeOff, Send, Copy, Plug, Palette, RotateCcw, Image as ImageIcon, X } from 'lucide-react'
+import { adminApi, adminDonateApi, smtpApi, type SmtpSettings } from '../../services/api'
 import { useSiteSettings, parseFooterColumns, applyColors, type FooterColumn, type FooterLink } from '../../store/siteSettingsStore'
 import toast from 'react-hot-toast'
 
@@ -132,6 +132,8 @@ export default function AdminSettings() {
   // General fields
   const [siteName, setSiteName] = useState('')
   const [siteDescription, setSiteDescription] = useState('')
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [logoUploading, setLogoUploading] = useState(false)
   const [copyrightText, setCopyrightText] = useState('')
   const [disclaimerText, setDisclaimerText] = useState('')
   const [heroTitle, setHeroTitle] = useState('')
@@ -148,6 +150,7 @@ export default function AdminSettings() {
   useEffect(() => {
     setSiteName(settings.siteName)
     setSiteDescription(settings.siteDescription)
+    setLogoUrl(settings.logoUrl)
     setCopyrightText(settings.copyrightText)
     setDisclaimerText(settings.disclaimerText)
     setHeroTitle(settings.heroTitle)
@@ -182,25 +185,62 @@ export default function AdminSettings() {
 
   // ── Save ─────────────────────────────────────────────────────────────
 
+  // Collect every editable field into one payload. Logo upload/remove must
+  // include the user's current (possibly unsaved) values for colors, footer,
+  // bridge etc. — otherwise the partial PUT roundtrips stale data from the DB
+  // and overwrites whatever the admin had typed but not saved yet.
+  const buildPayload = (overrides?: { logoUrl?: string | null }) => ({
+    siteName, siteDescription, copyrightText, disclaimerText,
+    logoUrl: overrides && 'logoUrl' in overrides ? overrides.logoUrl : logoUrl,
+    heroTitle, heroSubtitle,
+    donateHeaderImageUrl: donateHeaderImageUrl || null,
+    siteUrl,
+    primaryColor,
+    bgColor,
+    banKickMessage,
+    bridgeApiKey,
+    footerColumnsJson: JSON.stringify(columns),
+  })
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      await update({
-        siteName, siteDescription, copyrightText, disclaimerText,
-        heroTitle, heroSubtitle,
-        donateHeaderImageUrl: donateHeaderImageUrl || null,
-        siteUrl,
-        primaryColor,
-        bgColor,
-        banKickMessage,
-        bridgeApiKey,
-        footerColumnsJson: JSON.stringify(columns),
-      })
+      await update(buildPayload())
       toast.success('Настройки сохранены')
     } catch {
       toast.error('Ошибка сохранения')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleLogoUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) { toast.error('Можно загружать только изображения'); return }
+    if (file.size > 2 * 1024 * 1024) { toast.error('Максимум 2 МБ'); return }
+    setLogoUploading(true)
+    try {
+      const { url } = await adminApi.uploadSiteLogo(file)
+      await update(buildPayload({ logoUrl: url }))
+      setLogoUrl(url)
+      toast.success('Логотип обновлён')
+    } catch {
+      toast.error('Ошибка загрузки')
+    } finally {
+      setLogoUploading(false)
+    }
+  }
+
+  const handleLogoRemove = async () => {
+    setLogoUploading(true)
+    try {
+      // Empty string is the backend convention for "clear" (null = "no change").
+      await update(buildPayload({ logoUrl: '' as unknown as null }))
+      setLogoUrl(null)
+      toast.success('Логотип убран — используется стандартная иконка')
+    } catch {
+      toast.error('Ошибка')
+    } finally {
+      setLogoUploading(false)
     }
   }
 
@@ -291,6 +331,52 @@ export default function AdminSettings() {
             >
               <RotateCcw className="w-3 h-3" /> Сбросить к дефолту
             </button>
+          </div>
+        </Section>
+
+        {/* Logo */}
+        <Section title="Логотип сайта" icon={ImageIcon}>
+          <p className="text-xs text-c-t3 -mt-1">
+            Отображается в шапке и подвале сайта. Рекомендуется квадратное изображение, PNG/SVG, до 2 МБ.
+            Если не загружен — используется стандартная иконка.
+          </p>
+          <div className="flex items-center gap-4">
+            {/* Preview */}
+            <div className="w-16 h-16 rounded-xl border border-c-border bg-c-bg2 flex items-center justify-center overflow-hidden shrink-0">
+              {logoUrl ? (
+                <img src={logoUrl} alt="logo" className="w-full h-full object-contain p-1" />
+              ) : (
+                <ImageIcon className="w-6 h-6 text-c-t3" />
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex-1 flex flex-wrap gap-2">
+              <label className={`flex items-center gap-1.5 px-3 py-2 bg-c-primary hover:bg-c-primary-h text-white text-xs font-medium rounded-lg transition-colors cursor-pointer ${logoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                <Upload className="w-3.5 h-3.5" />
+                {logoUploading ? 'Загрузка...' : (logoUrl ? 'Заменить' : 'Загрузить')}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) handleLogoUpload(f)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+              {logoUrl && (
+                <button
+                  onClick={handleLogoRemove}
+                  disabled={logoUploading}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-c-bg3 border border-c-border hover:border-c-red/30 hover:text-c-red text-c-t2 text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Убрать
+                </button>
+              )}
+            </div>
           </div>
         </Section>
 

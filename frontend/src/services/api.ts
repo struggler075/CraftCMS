@@ -129,6 +129,10 @@ export const adminApi = {
     const fd = new FormData(); fd.append('file', file)
     return api.post<{ url: string }>('/admin/upload/server-image', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data)
   },
+  uploadSiteLogo: (file: File) => {
+    const fd = new FormData(); fd.append('file', file)
+    return api.post<{ url: string }>('/admin/upload/site-logo', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data)
+  },
 }
 
 export interface AdminUser {

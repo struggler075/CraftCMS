@@ -30,7 +30,10 @@ public class SiteSettingsService {
         SiteSettings settings = get();
         if (incoming.getSiteName() != null)              settings.setSiteName(incoming.getSiteName());
         if (incoming.getSiteDescription() != null)       settings.setSiteDescription(incoming.getSiteDescription());
-        if (incoming.getLogoUrl() != null)               settings.setLogoUrl(incoming.getLogoUrl());
+        // Logo is nullable — empty string from the admin form means "remove".
+        if (incoming.getLogoUrl() != null) {
+            settings.setLogoUrl(incoming.getLogoUrl().isBlank() ? null : incoming.getLogoUrl());
+        }
         if (incoming.getCopyrightText() != null)         settings.setCopyrightText(incoming.getCopyrightText());
         if (incoming.getDisclaimerText() != null)        settings.setDisclaimerText(incoming.getDisclaimerText());
         if (incoming.getFooterColumnsJson() != null)     settings.setFooterColumnsJson(incoming.getFooterColumnsJson());
@@ -38,7 +41,9 @@ public class SiteSettingsService {
         if (incoming.getHeroSubtitle() != null)          settings.setHeroSubtitle(incoming.getHeroSubtitle());
         if (incoming.getDonateHeaderImageUrl() != null)  settings.setDonateHeaderImageUrl(incoming.getDonateHeaderImageUrl());
         if (incoming.getSiteUrl() != null)               settings.setSiteUrl(incoming.getSiteUrl());
-        settings.setEmailVerificationRequired(incoming.isEmailVerificationRequired());
+        // Don't reset boolean toggles on partial PUTs — Jackson defaults a missing
+        // primitive boolean to false, which would silently clear the flag.
+        // The setter still exists for explicit toggles via a dedicated DTO if ever needed.
         if (incoming.getBanKickMessage() != null)        settings.setBanKickMessage(incoming.getBanKickMessage());
         if (incoming.getBridgeApiKey() != null && !incoming.getBridgeApiKey().isBlank())
             settings.setBridgeApiKey(incoming.getBridgeApiKey());

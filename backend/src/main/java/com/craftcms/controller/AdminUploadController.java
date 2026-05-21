@@ -44,7 +44,18 @@ public class AdminUploadController {
         return uploadImage(file, "donate");
     }
 
+    @PostMapping("/site-logo")
+    public ResponseEntity<?> uploadSiteLogo(@RequestParam("file") MultipartFile file) throws IOException {
+        // 2 MB cap — a logo doesn't need to be huge; protects every page render
+        // since the file is served from /uploads/ on cold start.
+        return uploadImage(file, "site", 2 * 1024 * 1024);
+    }
+
     private ResponseEntity<?> uploadImage(MultipartFile file, String subfolder) throws IOException {
+        return uploadImage(file, subfolder, 5 * 1024 * 1024);
+    }
+
+    private ResponseEntity<?> uploadImage(MultipartFile file, String subfolder, long maxBytes) throws IOException {
         if (file.isEmpty()) return ResponseEntity.badRequest().body("File is empty");
 
         String contentType = file.getContentType();
@@ -52,8 +63,8 @@ public class AdminUploadController {
             return ResponseEntity.badRequest().body("Only image files are allowed");
         }
 
-        if (file.getSize() > 5 * 1024 * 1024) {
-            return ResponseEntity.badRequest().body("File too large (max 5MB)");
+        if (file.getSize() > maxBytes) {
+            return ResponseEntity.badRequest().body("File too large (max " + (maxBytes / 1024 / 1024) + "MB)");
         }
 
         String originalName = file.getOriginalFilename();

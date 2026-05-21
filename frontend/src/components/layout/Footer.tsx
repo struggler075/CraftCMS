@@ -14,7 +14,7 @@ interface PaymentLogosState {
 
 export default function Footer() {
   const loaded = useSiteSettings((s) => s.loaded)
-  const { siteName, siteDescription, copyrightText, disclaimerText, footerColumnsJson } =
+  const { siteName, siteDescription, logoUrl, copyrightText, disclaimerText, footerColumnsJson } =
     useSiteSettings((s) => s.settings)
   const [logos, setLogos] = useState<PaymentLogosState | null>(null)
 
@@ -37,9 +37,13 @@ export default function Footer() {
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 bg-c-primary rounded-md flex items-center justify-center">
-                <ShoppingBag className="w-4 h-4 text-white" />
-              </div>
+              {logoUrl ? (
+                <img src={logoUrl} alt={siteName} className="w-7 h-7 object-contain rounded-md" />
+              ) : (
+                <div className="w-7 h-7 bg-c-primary rounded-md flex items-center justify-center">
+                  <ShoppingBag className="w-4 h-4 text-white" />
+                </div>
+              )}
               <span className="font-semibold text-c-text">{siteName}</span>
             </div>
             <p className="text-sm text-c-t2 leading-relaxed max-w-xs">{siteDescription}</p>
