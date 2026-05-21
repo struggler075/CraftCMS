@@ -3,12 +3,14 @@ package com.craftcms.service;
 import com.craftcms.model.SiteSettings;
 import com.craftcms.repository.SiteSettingsRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SiteSettingsService {
 
     private final SiteSettingsRepository repository;
@@ -16,6 +18,12 @@ public class SiteSettingsService {
     @Transactional
     public SiteSettings get() {
         return repository.findById(1L).orElseGet(() -> {
+            // Loud warning — settings row should never be missing after the very
+            // first start. If we hit this branch it means either the database
+            // was wiped or Postgres lost the row to a crash before fsync.
+            // Look for this line in logs to correlate with data-loss incidents.
+            log.warn("SiteSettings row id=1 not found — creating with defaults. " +
+                    "If this is unexpected, restore from the latest backup in /opt/craftcms/backups/");
             try {
                 return repository.save(SiteSettings.builder().build());
             } catch (DataIntegrityViolationException e) {

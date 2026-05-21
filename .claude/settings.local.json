@@ -17,7 +17,9 @@
       "Bash(xargs grep -l \"SpringApplication\\\\|@SpringBootApplication\")",
       "Bash(npm --version)",
       "Bash(npm run *)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "WebFetch(domain:gravitlauncher.com)",
+      "Bash(unzip -p \"serv/libraries/net/minecraftforge/forge/1.7.10-10.13.4.1614-1.7.10/1-lwjgl3ify-3.0.13-forgePatches.jar\" META-INF/MANIFEST.MF)"
     ]
   }
 }
