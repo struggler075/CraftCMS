@@ -21,6 +21,9 @@
         <java.version>17</java.version>
         <spring-cloud.version>2023.0.1</spring-cloud.version>
         <jjwt.version>0.12.3</jjwt.version>
+        <!-- Spring Boot 3.2.5 ships Lombok 1.18.30 which fails silently on JDK 23+.
+             Pin a version that explicitly supports JDK 24/25 (Zulu 25 was the trigger). -->
+        <lombok.version>1.18.38</lombok.version>
     </properties>
 
     <dependencyManagement>
@@ -109,6 +112,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
             <optional>true</optional>
         </dependency>
 
@@ -127,6 +131,21 @@
 
     <build>
         <plugins>
+            <!-- Explicit annotation-processor path. Without this, on JDK 23+ the
+                 compiler silently skips Lombok and every @Getter/@Builder vanishes. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
