@@ -63,9 +63,13 @@ public class Product {
      * because purchase orders still reference it. Treated as "gone" everywhere —
      * hidden from the public shop AND from the admin list — but the row itself
      * survives so order history stays intact.
+     *
+     * columnDefinition gives Postgres a DEFAULT so the JPA `ddl-auto: update`
+     * ALTER TABLE on existing data succeeds without complaining about NOT NULL
+     * against pre-existing rows.
      */
     @Builder.Default
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "boolean default false")
     private Boolean deleted = false;
 
     @Enumerated(EnumType.STRING)
