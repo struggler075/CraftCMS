@@ -117,11 +117,13 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/shop" element={<ShopPage />} />
+        <Route path="/shop/:serverId" element={<ShopPage />} />
         <Route path="/launcher" element={<LauncherPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/donate" element={<DonatePage />} />
+        <Route path="/donate/:serverId" element={<DonatePage />} />
         <Route path="/servers" element={<ServersPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />

@@ -37,4 +37,12 @@ public class DonateRank {
     @Builder.Default
     @Column(columnDefinition = "TEXT")
     private String featureIdsJson = "[]";
+
+    /**
+     * Server this rank is sold for. Nullable — NULL means "global".
+     * Plugin uses this to know where to apply the donate commands.
+     */
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "server_id")
+    private MinecraftServer server;
 }

@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Check, X, Wallet, ShoppingCart, Minus } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Check, X, Wallet, ShoppingCart, Minus, ArrowLeft } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { donateApi, userApi } from '../services/api'
-import type { DonatePageData, DonateRank, DonateFeature } from '../types'
+import { donateApi, serversApi, userApi } from '../services/api'
+import type { DonatePageData, DonateRank, DonateFeature, ServerWithStatus } from '../types'
 import { useSiteSettings } from '../store/siteSettingsStore'
 import { useAuthStore } from '../store/authStore'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import PageTransition from '../components/layout/PageTransition'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import ServerSelectGrid from '../components/ServerSelectGrid'
 import toast from 'react-hot-toast'
 
 function compactPrice(price: number): string {
@@ -162,15 +164,36 @@ function PurchaseModal({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DonatePage() {
+  const navigate = useNavigate()
+  const { serverId: serverIdParam } = useParams<{ serverId?: string }>()
+  const serverId = serverIdParam ? parseInt(serverIdParam, 10) : undefined
+
   const [data, setData] = useState<DonatePageData | null>(null)
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<DonateRank | null>(null)
+  const [serverInfo, setServerInfo] = useState<ServerWithStatus | null>(null)
   const donateHeaderImageUrl = useSiteSettings((s) => s.settings.donateHeaderImageUrl)
   const updateBalance = useAuthStore((s) => s.updateBalance)
 
   useEffect(() => {
-    donateApi.getPage().then(setData).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+    if (serverId == null) { setLoading(false); return }
+    setLoading(true)
+    donateApi.getPage(serverId).then(setData).catch(() => {}).finally(() => setLoading(false))
+    serversApi.getAll().then((all) => setServerInfo(all.find((s) => s.id === serverId) ?? null))
+  }, [serverId])
+
+  // ── No server picked yet → landing
+  if (serverId == null) {
+    return (
+      <PageTransition>
+        <ServerSelectGrid
+          title="Донат"
+          subtitle="Выберите сервер, для которого хотите купить ранг"
+          onPick={(s) => navigate(`/donate/${s.id}`)}
+        />
+      </PageTransition>
+    )
+  }
 
   const ranks = data?.ranks ?? []
   const features = data?.features ?? []
@@ -186,10 +209,19 @@ export default function DonatePage() {
           {donateHeaderImageUrl && (
             <img src={donateHeaderImageUrl} alt="" className="w-14 h-14 object-contain rounded-xl shrink-0" />
           )}
-          <div>
-            <h1 className="text-2xl font-semibold text-c-text">Донат</h1>
-            <p className="text-sm text-c-t2 mt-1">Поддержите проект и получите игровые привилегии</p>
+          <div className="flex-1">
+            <h1 className="text-2xl font-semibold text-c-text">
+              Донат · <span className="text-c-primary">{serverInfo?.name ?? '...'}</span>
+            </h1>
+            <p className="text-sm text-c-t2 mt-1">{serverInfo?.description ?? 'Поддержите проект и получите игровые привилегии'}</p>
           </div>
+          <button
+            onClick={() => navigate('/donate')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-c-bg2 border border-c-border hover:border-c-border-h text-c-t2 hover:text-c-text text-xs transition-colors cursor-pointer shrink-0"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Сменить сервер
+          </button>
         </div>
 
         {loading ? (

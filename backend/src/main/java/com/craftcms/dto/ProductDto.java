@@ -33,4 +33,7 @@ public class ProductDto {
     private String command;
     private Boolean quantityEnabled;
     private Integer defaultQuantity;
+
+    /** Server this product belongs to. Nullable = global / no specific server. */
+    private Long serverId;
 }

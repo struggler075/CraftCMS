@@ -62,6 +62,8 @@ export interface Product {
   price: number
   imageUrl: string
   category: Category
+  /** Server this product is sold for (nullable = global / any server). */
+  server?: ServerSummary | null
   stock: number
   featured: boolean
   active: boolean
@@ -70,6 +72,13 @@ export interface Product {
   quantityEnabled: boolean
   defaultQuantity: number
   createdAt: string
+}
+
+export interface ServerSummary {
+  id: number
+  name: string
+  description?: string | null
+  imageUrl?: string | null
 }
 
 export type ProductType =
@@ -142,6 +151,9 @@ export interface DonateRank {
   sortOrder: number
   featured: boolean
   featureIds: number[]
+  /** Server this rank is sold for (nullable = global). */
+  serverId?: number | null
+  serverName?: string | null
 }
 
 export interface DonatePageData {

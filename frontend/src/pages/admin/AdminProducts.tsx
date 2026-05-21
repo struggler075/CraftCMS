@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Pencil, Trash2, Package, X, Check, Upload, ImageIcon } from 'lucide-react'
-import { productsApi, categoriesApi, adminApi } from '../../services/api'
-import type { Category, Product } from '../../types'
+import { productsApi, categoriesApi, serversApi, adminApi } from '../../services/api'
+import type { Category, Product, ServerWithStatus } from '../../types'
 import LoadingSpinner from '../../components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = {
   name: '', description: '', price: '', imageUrl: '',
-  categoryId: '', stock: '0', featured: false, active: true, type: 'ITEM', command: '',
+  categoryId: '', serverId: '', stock: '0', featured: false, active: true, type: 'ITEM', command: '',
   quantityEnabled: false, defaultQuantity: '1',
 }
 
@@ -115,6 +115,7 @@ function AdminModal({ title, onClose, onSave, saving, children }: {
 export default function AdminProducts() {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [servers, setServers] = useState<ServerWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -123,17 +124,33 @@ export default function AdminProducts() {
 
   const load = async () => {
     setLoading(true)
-    const [prods, cats] = await Promise.all([productsApi.getAllAdmin(), categoriesApi.getAll()])
-    setProducts(prods); setCategories(cats); setLoading(false)
+    const [prods, cats, srvs] = await Promise.all([
+      productsApi.getAllAdmin(),
+      categoriesApi.getAll(),
+      serversApi.getAll(),
+    ])
+    setProducts(prods); setCategories(cats); setServers(srvs); setLoading(false)
   }
 
   useEffect(() => { load() }, [])
 
-  const openCreate = () => { setEditId(null); setForm({ ...EMPTY_FORM, categoryId: categories[0]?.id.toString() ?? '' }); setShowForm(true) }
+  const openCreate = () => {
+    setEditId(null)
+    setForm({
+      ...EMPTY_FORM,
+      categoryId: categories[0]?.id.toString() ?? '',
+      // Default to first server so new products get a server right away —
+      // existing ones without a server stay NULL and can be backfilled.
+      serverId: servers[0]?.id.toString() ?? '',
+    })
+    setShowForm(true)
+  }
   const openEdit = (p: Product) => {
     setEditId(p.id)
     setForm({ name: p.name, description: p.description ?? '', price: p.price.toString(), imageUrl: p.imageUrl ?? '',
-      categoryId: p.category.id.toString(), stock: p.stock.toString(), featured: p.featured, active: p.active, type: p.type,
+      categoryId: p.category.id.toString(),
+      serverId: p.server?.id?.toString() ?? '',
+      stock: p.stock.toString(), featured: p.featured, active: p.active, type: p.type,
       command: p.command ?? '', quantityEnabled: p.quantityEnabled ?? false, defaultQuantity: (p.defaultQuantity ?? 1).toString() })
     setShowForm(true)
   }
@@ -142,7 +159,9 @@ export default function AdminProducts() {
     setSaving(true)
     try {
       const payload = { name: form.name, description: form.description, price: parseFloat(form.price),
-        imageUrl: form.imageUrl, categoryId: parseInt(form.categoryId), stock: parseInt(form.stock),
+        imageUrl: form.imageUrl, categoryId: parseInt(form.categoryId),
+        serverId: form.serverId ? parseInt(form.serverId) : null,
+        stock: parseInt(form.stock),
         featured: form.featured, active: form.active, type: form.type as Product['type'],
         command: form.command || null, quantityEnabled: form.quantityEnabled,
         defaultQuantity: parseInt(form.defaultQuantity) || 1 }
@@ -219,6 +238,15 @@ export default function AdminProducts() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-c-t2 mb-1">Сервер</label>
+              <select value={form.serverId} onChange={(e) => set('serverId', e.target.value)} className="input cursor-pointer">
+                <option value="" className="bg-c-bg2">— Без сервера (виден везде) —</option>
+                {servers.map((s) => <option key={s.id} value={s.id} className="bg-c-bg2">{s.name}</option>)}
+              </select>
+              <p className="text-xs text-c-t3 mt-1">Товар появится только в магазине этого сервера. Без сервера — показывается во всех.</p>
             </div>
             <div className="flex gap-4 flex-wrap">
               {[['featured', 'Рекомендуемый'], ['active', 'Активен'], ['quantityEnabled', 'Выбор количества']].map(([k, l]) => (

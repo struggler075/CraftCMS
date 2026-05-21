@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { Search, ChevronDown } from 'lucide-react'
-import { categoriesApi, productsApi, type ProductsQuery } from '../services/api'
-import type { Category, Product } from '../types'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Search, ChevronDown, ArrowLeft } from 'lucide-react'
+import { categoriesApi, productsApi, serversApi, type ProductsQuery } from '../services/api'
+import type { Category, Product, ServerWithStatus } from '../types'
 import PageTransition from '../components/layout/PageTransition'
 import CategorySidebar from '../components/shop/CategorySidebar'
 import ProductCard from '../components/shop/ProductCard'
 import ProductModal from '../components/shop/ProductModal'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import ServerSelectGrid from '../components/ServerSelectGrid'
 
 const SORT_OPTIONS = [
   { label: 'Новые', value: 'createdAt-desc' },
@@ -17,6 +19,10 @@ const SORT_OPTIONS = [
 ]
 
 export default function ShopPage() {
+  const navigate = useNavigate()
+  const { serverId: serverIdParam } = useParams<{ serverId?: string }>()
+  const serverId = serverIdParam ? parseInt(serverIdParam, 10) : undefined
+
   const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [total, setTotal] = useState(0)
@@ -27,16 +33,23 @@ export default function ShopPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [serverInfo, setServerInfo] = useState<ServerWithStatus | null>(null)
 
   useEffect(() => {
+    if (serverId == null) return
     categoriesApi.getAll().then(setCategories)
-  }, [])
+    // Fetch the picked server's metadata so we can show its name in the header.
+    serversApi.getAll().then((all) => {
+      setServerInfo(all.find((s) => s.id === serverId) ?? null)
+    })
+  }, [serverId])
 
   const loadProducts = async (page: number, category: string, sort: string, append = false) => {
+    if (serverId == null) return
     setLoading(true)
     const [sortBy, sortDir] = sort.split('-')
     try {
-      const query: ProductsQuery = { category: category || undefined, page, size: 24, sortBy, sortDir }
+      const query: ProductsQuery = { category: category || undefined, serverId, page, size: 24, sortBy, sortDir }
       const data = await productsApi.getAll(query)
       if (append) {
         setProducts((prev) => [...prev, ...data.content])
@@ -52,8 +65,23 @@ export default function ShopPage() {
   }
 
   useEffect(() => {
+    if (serverId == null) return
     loadProducts(0, selectedCategory, sortValue, false)
-  }, [selectedCategory, sortValue])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, sortValue, serverId])
+
+  // ── No server picked yet → landing
+  if (serverId == null) {
+    return (
+      <PageTransition>
+        <ServerSelectGrid
+          title="Магазин"
+          subtitle="Выберите сервер, на котором хотите получить товары"
+          onPick={(s) => navigate(`/shop/${s.id}`)}
+        />
+      </PageTransition>
+    )
+  }
 
   const handleCategoryChange = (slug: string) => {
     setSelectedCategory(slug)
@@ -68,9 +96,20 @@ export default function ShopPage() {
     <PageTransition>
       <main className="pt-20 pb-20 px-4 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6 pt-6">
-          <h1 className="text-2xl font-semibold text-c-text">Магазин</h1>
-          <p className="text-sm text-c-t2 mt-1">Блоки, предметы, ранги и многое другое</p>
+        <div className="mb-6 pt-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-c-text">
+              Магазин · <span className="text-c-primary">{serverInfo?.name ?? '...'}</span>
+            </h1>
+            <p className="text-sm text-c-t2 mt-1">{serverInfo?.description ?? 'Блоки, предметы, ранги и многое другое'}</p>
+          </div>
+          <button
+            onClick={() => navigate('/shop')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-c-bg2 border border-c-border hover:border-c-border-h text-c-t2 hover:text-c-text text-xs transition-colors cursor-pointer shrink-0"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Сменить сервер
+          </button>
         </div>
 
         {/* Search + sort */}

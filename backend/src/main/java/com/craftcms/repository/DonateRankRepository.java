@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface DonateRankRepository extends JpaRepository<DonateRank, Long> {
     List<DonateRank> findAllByOrderBySortOrderAsc();
+    List<DonateRank> findByServerIdOrderBySortOrderAsc(Long serverId);
 }

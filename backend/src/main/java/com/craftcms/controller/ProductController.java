@@ -23,6 +23,7 @@ public class ProductController {
     @GetMapping
     public ResponseEntity<Map<String, Object>> getProducts(
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) Long serverId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
@@ -33,7 +34,7 @@ public class ProductController {
                 : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
 
-        Page<Product> products = productService.getProducts(category, pageable);
+        Page<Product> products = productService.getProducts(category, serverId, pageable);
 
         return ResponseEntity.ok(Map.of(
                 "content", products.getContent(),

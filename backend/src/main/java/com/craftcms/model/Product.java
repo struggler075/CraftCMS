@@ -34,6 +34,15 @@ public class Product {
     @JoinColumn(name = "category_id")
     private Category category;
 
+    /**
+     * Server this product is sold for. Nullable for backwards compatibility —
+     * existing rows have NULL until an admin assigns a server. The shop UI
+     * treats NULL as "global / no server" and shows the product everywhere.
+     */
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "server_id")
+    private MinecraftServer server;
+
     @Builder.Default
     private Integer stock = 0;
 

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Pencil, Trash2, Gem, X, Check, Upload, ImageIcon, List } from 'lucide-react'
-import { adminDonateApi } from '../../services/api'
-import type { DonateFeature, DonateRank } from '../../types'
+import { adminDonateApi, serversApi } from '../../services/api'
+import type { DonateFeature, DonateRank, ServerWithStatus } from '../../types'
 import LoadingSpinner from '../../components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
@@ -183,11 +183,13 @@ function FeaturesTab() {
 
 const EMPTY_RANK = {
   name: '', color: '#7c3aed', imageUrl: '', price: '0', sortOrder: '0', featured: false, featureIds: [] as number[], command: '',
+  serverId: '' as string,
 }
 
 function RanksTab() {
   const [ranks, setRanks] = useState<DonateRank[]>([])
   const [allFeatures, setAllFeatures] = useState<DonateFeature[]>([])
+  const [servers, setServers] = useState<ServerWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -195,17 +197,26 @@ function RanksTab() {
   const [saving, setSaving] = useState(false)
 
   const load = async () => {
-    const [r, f] = await Promise.all([adminDonateApi.getRanks(), adminDonateApi.getFeatures()])
-    setRanks(r); setAllFeatures(f); setLoading(false)
+    const [r, f, s] = await Promise.all([
+      adminDonateApi.getRanks(),
+      adminDonateApi.getFeatures(),
+      serversApi.getAll(),
+    ])
+    setRanks(r); setAllFeatures(f); setServers(s); setLoading(false)
   }
   useEffect(() => { load() }, [])
 
-  const openCreate = () => { setEditId(null); setForm(EMPTY_RANK); setShowForm(true) }
+  const openCreate = () => {
+    setEditId(null)
+    setForm({ ...EMPTY_RANK, serverId: servers[0]?.id.toString() ?? '' })
+    setShowForm(true)
+  }
   const openEdit = (r: DonateRank) => {
     setEditId(r.id)
     setForm({ name: r.name, color: r.color, imageUrl: r.imageUrl ?? '', price: r.price.toString(),
       sortOrder: r.sortOrder.toString(), featured: r.featured, featureIds: r.featureIds,
-      command: (r as unknown as { command?: string }).command ?? '' })
+      command: (r as unknown as { command?: string }).command ?? '',
+      serverId: r.serverId != null ? r.serverId.toString() : '' })
     setShowForm(true)
   }
 
@@ -215,8 +226,14 @@ function RanksTab() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const payload = { ...form, price: parseInt(form.price), sortOrder: parseInt(form.sortOrder),
-        imageUrl: form.imageUrl || null, command: form.command || null }
+      const payload = {
+        ...form,
+        price: parseInt(form.price),
+        sortOrder: parseInt(form.sortOrder),
+        imageUrl: form.imageUrl || null,
+        command: form.command || null,
+        serverId: form.serverId ? parseInt(form.serverId) : null,
+      }
       if (editId) { await adminDonateApi.updateRank(editId, payload); toast.success('Ранг обновлён') }
       else { await adminDonateApi.createRank(payload); toast.success('Ранг создан') }
       setShowForm(false); load()
@@ -301,6 +318,20 @@ function RanksTab() {
                     className="input resize-none h-16 font-mono text-xs"
                     placeholder="lp user {username} parent set vip" />
                   <p className="text-xs text-c-t3 mt-1">Плейсхолдер <code>{'{username}'}</code> — ник игрока</p>
+                </div>
+
+                {/* Server */}
+                <div>
+                  <label className="block text-sm text-c-t2 mb-1">Сервер</label>
+                  <select
+                    value={form.serverId}
+                    onChange={(e) => setForm((f) => ({ ...f, serverId: e.target.value }))}
+                    className="input cursor-pointer"
+                  >
+                    <option value="" className="bg-c-bg2">— Без сервера (виден везде) —</option>
+                    {servers.map((s) => <option key={s.id} value={s.id} className="bg-c-bg2">{s.name}</option>)}
+                  </select>
+                  <p className="text-xs text-c-t3 mt-1">Ранг появится только в донат-разделе этого сервера.</p>
                 </div>
 
                 {/* Image */}

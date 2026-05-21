@@ -62,7 +62,7 @@ export const categoriesApi = {
 }
 
 export interface ProductsQuery {
-  category?: string; page?: number; size?: number; sortBy?: string; sortDir?: string;
+  category?: string; serverId?: number; page?: number; size?: number; sortBy?: string; sortDir?: string;
 }
 
 export const productsApi = {
@@ -206,7 +206,8 @@ export const adminAuditApi = {
 }
 
 export const donateApi = {
-  getPage: () => api.get<DonatePageData>('/donate').then((r) => r.data),
+  getPage: (serverId?: number) =>
+    api.get<DonatePageData>('/donate', { params: serverId ? { serverId } : {} }).then((r) => r.data),
 }
 
 export const adminDonateApi = {
