@@ -158,7 +158,9 @@ run_logged_sh "mvn package (5-10 мин)..." 900 "
   tail -25 "$LOG_FILE" | sed 's/^/    /'
   err "Сборка backend упала"
 }
-NEW_JAR=$(ls target/craftcms-backend-*.jar 2>/dev/null | head -1)
+# Resolve to an ABSOLUTE path — later we'll `cd /` and the relative path
+# `target/...` will no longer exist (caused the "cannot stat" copy failure).
+NEW_JAR=$(ls "$SRC_DIR/backend/target/craftcms-backend-"*.jar 2>/dev/null | head -1)
 [[ -z "$NEW_JAR" ]] && err "JAR не найден после сборки"
 ok "Backend собран ($(du -h "$NEW_JAR" | awk '{print $1}'))"
 cd /
@@ -174,8 +176,9 @@ elif [[ -f "$SRC_DIR/BridgePlugin/pom.xml" ]]; then
     JAVA_HOME='$JAVA_HOME_PATH' '$M2_HOME/bin/mvn' \
       -B -ntp clean package -DskipTests
   "; then
-    # Filter out the maven-shade "original-*.jar" artefact — we want the shaded one.
-    BRIDGE_NEW_JAR=$(ls target/*.jar 2>/dev/null | grep -v 'original' | head -1)
+    # Absolute path — same reason as above (we'll cd / before copying).
+    # Filter out maven-shade's "original-*.jar" — we need the shaded one.
+    BRIDGE_NEW_JAR=$(ls "$SRC_DIR/BridgePlugin/target/"*.jar 2>/dev/null | grep -v 'original' | head -1)
     if [[ -n "$BRIDGE_NEW_JAR" ]]; then
       ok "BridgePlugin собран ($(du -h "$BRIDGE_NEW_JAR" | awk '{print $1}'))"
     else
@@ -204,6 +207,8 @@ run_logged "vite build..."  300 ./node_modules/.bin/vite build    || err "vite b
 
 [[ ! -f dist/index.html ]] && err "dist/index.html не создан после build"
 ok "Frontend собран ($(du -sh dist | awk '{print $1}'))"
+# Remember the absolute dist/ path before we cd away from it.
+FRONTEND_DIST="$SRC_DIR/frontend/dist"
 cd /
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -234,9 +239,9 @@ if [[ -n "$BRIDGE_NEW_JAR" ]]; then
   ok "BridgePlugin.jar заменён"
 fi
 
-# Swap frontend
+# Swap frontend (use the absolute path we stashed earlier — we're in / now)
 rm -rf "$INSTALL_DIR/frontend/"*
-cp -r "$SRC_DIR/frontend/dist/"* "$INSTALL_DIR/frontend/"
+cp -r "$FRONTEND_DIST/"* "$INSTALL_DIR/frontend/"
 chown -R craftcms:craftcms "$INSTALL_DIR/frontend"
 ok "Frontend заменён"
 
