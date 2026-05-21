@@ -80,18 +80,17 @@
         </dependency>
 
         <!-- Database -->
+        <!-- Both drivers are bundled; the active spring profile picks which is wired. -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- PostgreSQL (for production - uncomment and comment H2)
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
-        -->
 
         <!-- Mail -->
         <dependency>

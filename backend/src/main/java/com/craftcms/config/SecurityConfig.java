@@ -1,6 +1,7 @@
 package com.craftcms.config;
 
 import com.craftcms.security.JwtAuthenticationFilter;
+import com.craftcms.security.RestAuthenticationEntryPoint;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,6 +34,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
+    private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -45,10 +47,9 @@ public class SecurityConfig {
                 .requestMatchers("/uploads/**").permitAll()
                 .requestMatchers("/skin/**").permitAll()
                 .requestMatchers("/api/health").permitAll()
+                .requestMatchers("/api/auth/me").authenticated()
+                .requestMatchers("/api/auth/logout-all").authenticated()
                 .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/api/auth/2fa/verify").permitAll()
-                .requestMatchers("/api/auth/forgot-password").permitAll()
-                .requestMatchers("/api/auth/reset-password").permitAll()
                 .requestMatchers("/api/bridge/**").permitAll()
                 .requestMatchers("/api/payments/webhook/**").permitAll()
                 .requestMatchers("/api/payments/**").authenticated()
@@ -65,6 +66,7 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
             .headers(headers -> headers.frameOptions(frame -> frame.disable()))
+            .exceptionHandling(eh -> eh.authenticationEntryPoint(restAuthenticationEntryPoint))
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

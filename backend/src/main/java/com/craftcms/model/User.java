@@ -60,6 +60,12 @@ public class User implements UserDetails {
     @Builder.Default
     private boolean totpEnabled = false;
 
+    // Incremented on any change that should invalidate live JWTs:
+    // password reset, block/unblock, role change, "logout everywhere".
+    @Column(nullable = false, columnDefinition = "bigint default 0")
+    @Builder.Default
+    private long tokenVersion = 0L;
+
     @Column(nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

@@ -291,6 +291,7 @@ function TotpModal({
 export default function ProfilePage() {
   const navigate = useNavigate()
   const { user, isAuthenticated } = useAuthStore()
+  const setUser = useAuthStore((s) => s.setUser)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
@@ -309,6 +310,18 @@ export default function ProfilePage() {
     setCapeUrl(p.capeUrl ?? undefined)
     setEmailVerified(p.emailVerified)
     setTotpEnabled(totpStatus.enabled)
+    // Keep the global auth store in sync with the authoritative server payload —
+    // username, email, role and balance may have been changed by an admin.
+    setUser({
+      id: p.id,
+      username: p.username,
+      email: p.email,
+      role: p.role,
+      balance: Number(p.balance ?? 0),
+      emailVerified: p.emailVerified,
+      skinUrl: p.skinUrl ?? null,
+      capeUrl: p.capeUrl ?? null,
+    })
   }
 
   useEffect(() => {

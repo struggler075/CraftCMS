@@ -7,11 +7,6 @@
           <package value="com.craftcms" />
         </packages>
       </persistence-unit>
-      <persistence-unit moduleName="license-server" name="Default">
-        <packages>
-          <package value="com.craftcms.license" />
-        </packages>
-      </persistence-unit>
     </persistence-units>
   </component>
 </project>

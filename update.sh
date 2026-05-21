@@ -1,5 +1,6 @@
 #!/bin/bash
 # CraftCMS — Обновление до новой версии
+[ -z "$BASH_VERSION" ] && exec bash "$0" "$@"
 set -euo pipefail
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; CYAN='\033[0;36m'
@@ -20,7 +21,7 @@ echo ""
 
 INSTALL_DIR="/opt/craftcms"
 SRC_DIR="/opt/craftcms-src-update"
-GITHUB_REPO="struggler075/CMSMinecraft"
+GITHUB_REPO="struggler075/CraftCMS"
 M2_HOME="/opt/maven"
 export PATH="$M2_HOME/bin:$PATH"
 JAVA_HOME_PATH=$(dirname "$(dirname "$(readlink -f "$(which java)")")")

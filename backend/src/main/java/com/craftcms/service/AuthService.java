@@ -15,6 +15,7 @@ import jakarta.persistence.EntityManager;
 import com.craftcms.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -61,9 +62,10 @@ public class AuthService {
                 .emailVerified(false)
                 .build();
 
-        userRepository.save(user);
+        user = userRepository.save(user);
 
-        // Always try to send verification email if SMTP is configured
+        // Send verification email if SMTP is configured — purely optional,
+        // confirming it later only unlocks password recovery.
         boolean emailSent = sendVerificationEmail(user, settings);
 
         String token = jwtTokenProvider.generateToken(user);
@@ -114,9 +116,11 @@ public class AuthService {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
+        ensureAccountUsable(user);
+
         // 2FA check
         if (user.isTotpEnabled()) {
-            String preAuthToken = jwtTokenProvider.generatePreAuthToken(user.getUsername());
+            String preAuthToken = jwtTokenProvider.generatePreAuthToken(user);
             return AuthResponse.builder()
                     .requiresTOTP(true)
                     .preAuthToken(preAuthToken)
@@ -124,6 +128,40 @@ public class AuthService {
                     .build();
         }
 
+        return issueSession(user);
+    }
+
+    public AuthResponse verifyTotp(String preAuthToken, String code) {
+        Long userId;
+        try {
+            userId = jwtTokenProvider.extractPreAuthUserId(preAuthToken);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Недействительный или истёкший токен. Войдите заново.");
+        }
+        if (userId == null) throw new IllegalArgumentException("Недействительный токен. Войдите заново.");
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("Пользователь не найден"));
+
+        ensureAccountUsable(user);
+
+        if (!totpService.verifyCode(user.getTotpSecret(), code)) {
+            throw new IllegalArgumentException("Неверный код. Попробуйте снова.");
+        }
+
+        return issueSession(user);
+    }
+
+    private void ensureAccountUsable(User user) {
+        if (user.isBlocked()) {
+            String reason = user.getBlockReason();
+            throw new LockedException("Аккаунт заблокирован" + (reason != null && !reason.isBlank() ? ": " + reason : ""));
+        }
+        // Email verification is OPTIONAL — it gates password recovery only
+        // (see forgotPassword below), never login.
+    }
+
+    private AuthResponse issueSession(User user) {
         String token = jwtTokenProvider.generateToken(user);
         return AuthResponse.builder()
                 .token(token)
@@ -135,27 +173,18 @@ public class AuthService {
                 .build();
     }
 
-    public AuthResponse verifyTotp(String preAuthToken, String code) {
-        String username;
-        try {
-            username = jwtTokenProvider.extractPreAuthUsername(preAuthToken);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Недействительный или истёкший токен. Войдите заново.");
-        }
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("Пользователь не найден"));
-        if (!totpService.verifyCode(user.getTotpSecret(), code)) {
-            throw new IllegalArgumentException("Неверный код. Попробуйте снова.");
-        }
-        String token = jwtTokenProvider.generateToken(user);
-        return AuthResponse.builder()
-                .token(token)
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .role(user.getRole().name())
-                .balance(user.getBalance())
-                .message("Добро пожаловать!")
-                .build();
+    /**
+     * Invalidates every JWT ever issued for this user. Used by:
+     *  - admin password reset / role change / block
+     *  - self-service password reset
+     *  - "logout everywhere" endpoint
+     */
+    @Transactional
+    public void bumpTokenVersion(Long userId) {
+        userRepository.findById(userId).ifPresent(u -> {
+            u.setTokenVersion(u.getTokenVersion() + 1);
+            userRepository.save(u);
+        });
     }
 
     @Transactional
@@ -191,6 +220,8 @@ public class AuthService {
         }
         User user = token.getUser();
         user.setPassword(passwordEncoder.encode(newPassword));
+        // Password rotated → kill every existing session for this account.
+        user.setTokenVersion(user.getTokenVersion() + 1);
         userRepository.save(user);
         passwordResetTokenRepository.delete(token);
     }

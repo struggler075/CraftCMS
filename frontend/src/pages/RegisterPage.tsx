@@ -1,17 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Eye, EyeOff, Check, ShoppingBag } from 'lucide-react'
+import { Eye, EyeOff, ShoppingBag } from 'lucide-react'
 import { authApi } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import PageTransition from '../components/layout/PageTransition'
+import PasswordStrengthMeter from '../components/auth/PasswordStrengthMeter'
 import toast from 'react-hot-toast'
-
-const passwordRules = [
-  { label: 'Минимум 6 символов', test: (p: string) => p.length >= 6 },
-  { label: 'Содержит цифру', test: (p: string) => /\d/.test(p) },
-  { label: 'Содержит букву', test: (p: string) => /[a-zA-Z]/.test(p) },
-]
 
 export default function RegisterPage() {
   const navigate = useNavigate()
@@ -113,13 +108,8 @@ export default function RegisterPage() {
                   </button>
                 </div>
                 {form.password && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 space-y-1">
-                    {passwordRules.map((rule) => (
-                      <div key={rule.label} className="flex items-center gap-1.5 text-xs">
-                        <Check className={`w-3 h-3 ${rule.test(form.password) ? 'text-c-green' : 'text-c-t3'}`} />
-                        <span className={rule.test(form.password) ? 'text-c-green' : 'text-c-t3'}>{rule.label}</span>
-                      </div>
-                    ))}
+                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-2">
+                    <PasswordStrengthMeter password={form.password} />
                   </motion.div>
                 )}
               </div>

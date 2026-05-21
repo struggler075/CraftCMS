@@ -4,9 +4,11 @@ import com.craftcms.dto.BalanceRequest;
 import com.craftcms.dto.OrderDto;
 import com.craftcms.dto.PurchaseRequest;
 import com.craftcms.dto.UserProfileDto;
+import com.craftcms.model.AuditAction;
 import com.craftcms.model.User;
 import com.craftcms.repository.OrderRepository;
 import com.craftcms.repository.UserRepository;
+import com.craftcms.service.AuditLogService;
 import com.craftcms.service.AuthService;
 import com.craftcms.service.OrderService;
 import jakarta.validation.Valid;
@@ -30,6 +32,7 @@ public class UserController {
     private final OrderRepository orderRepository;
     private final OrderService orderService;
     private final AuthService authService;
+    private final AuditLogService auditLog;
 
     @GetMapping("/profile")
     public ResponseEntity<UserProfileDto> getProfile(@AuthenticationPrincipal UserDetails userDetails) {
@@ -75,8 +78,13 @@ public class UserController {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + request.getUsername()));
 
-        user.setBalance(user.getBalance().add(request.getAmount()));
+        var oldBalance = user.getBalance();
+        user.setBalance(oldBalance.add(request.getAmount()));
         userRepository.save(user);
+
+        auditLog.log(AuditAction.USER_BALANCE_CHANGE, user,
+                "баланс " + oldBalance.toPlainString() + " → " + user.getBalance().toPlainString()
+                        + " ₽ (начисление " + request.getAmount().toPlainString() + ")");
 
         return ResponseEntity.ok(Map.of(
                 "message", "Balance updated",

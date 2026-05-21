@@ -1,8 +1,24 @@
 export interface User {
+  id?: number
   username: string
   email: string
   role: 'USER' | 'ADMIN'
   balance: number
+  emailVerified?: boolean
+  skinUrl?: string | null
+  capeUrl?: string | null
+}
+
+export interface CurrentUser {
+  id: number
+  username: string
+  email: string
+  role: 'USER' | 'ADMIN'
+  balance: number
+  emailVerified: boolean
+  blocked: boolean
+  skinUrl: string | null
+  capeUrl: string | null
 }
 
 export interface UserProfile {

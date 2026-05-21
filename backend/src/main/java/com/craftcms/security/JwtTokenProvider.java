@@ -1,11 +1,11 @@
 package com.craftcms.security;
 
+import com.craftcms.model.User;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -15,15 +15,21 @@ import java.util.Date;
 @Slf4j
 public class JwtTokenProvider {
 
+    public static final String CLAIM_USERNAME = "uname";
+    public static final String CLAIM_TOKEN_VERSION = "tv";
+    public static final String CLAIM_PRE_AUTH = "pre_auth";
+
     @Value("${app.jwt.secret}")
     private String jwtSecret;
 
     @Value("${app.jwt.expiration}")
     private long jwtExpiration;
 
-    public String generateToken(UserDetails userDetails) {
+    public String generateToken(User user) {
         return Jwts.builder()
-                .subject(userDetails.getUsername())
+                .subject(String.valueOf(user.getId()))
+                .claim(CLAIM_USERNAME, user.getUsername())
+                .claim(CLAIM_TOKEN_VERSION, user.getTokenVersion())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
                 .signWith(getSigningKey())
@@ -31,40 +37,69 @@ public class JwtTokenProvider {
     }
 
     /** Short-lived token issued after password check when 2FA is required. */
-    public String generatePreAuthToken(String username) {
+    public String generatePreAuthToken(User user) {
         return Jwts.builder()
-                .subject(username)
-                .claim("pre_auth", true)
+                .subject(String.valueOf(user.getId()))
+                .claim(CLAIM_USERNAME, user.getUsername())
+                .claim(CLAIM_PRE_AUTH, true)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 5 * 60 * 1000)) // 5 min
                 .signWith(getSigningKey())
                 .compact();
     }
 
-    /** Returns username only if token is a valid pre-auth token, else throws. */
-    public String extractPreAuthUsername(String token) {
+    /** Returns userId only if token is a valid pre-auth token, else throws. */
+    public Long extractPreAuthUserId(String token) {
         Claims claims = parseClaims(token);
-        if (!Boolean.TRUE.equals(claims.get("pre_auth", Boolean.class))) {
+        if (!Boolean.TRUE.equals(claims.get(CLAIM_PRE_AUTH, Boolean.class))) {
             throw new IllegalArgumentException("Not a pre-auth token");
         }
-        return claims.getSubject();
+        return parseLongSubject(claims);
     }
 
-    public String extractUsername(String token) {
-        return parseClaims(token).getSubject();
+    public Long extractUserId(String token) {
+        return parseLongSubject(parseClaims(token));
     }
 
-    public boolean validateToken(String token, UserDetails userDetails) {
+    public String extractUsernameClaim(String token) {
+        return parseClaims(token).get(CLAIM_USERNAME, String.class);
+    }
+
+    public Long extractTokenVersion(String token) {
+        Number tv = parseClaims(token).get(CLAIM_TOKEN_VERSION, Number.class);
+        return tv == null ? null : tv.longValue();
+    }
+
+    /**
+     * Full validation against the current state of a persisted User.
+     * Returns true only when the token's identity, version and username all match
+     * the live DB row, the user is not blocked and the token is not expired.
+     */
+    public boolean validateToken(String token, User user) {
         try {
-            String username = extractUsername(token);
-            return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+            Claims claims = parseClaims(token);
+            if (claims.getExpiration() == null || claims.getExpiration().before(new Date())) return false;
+            if (Boolean.TRUE.equals(claims.get(CLAIM_PRE_AUTH, Boolean.class))) return false;
+
+            Long uid = parseLongSubject(claims);
+            if (uid == null || !uid.equals(user.getId())) return false;
+
+            Number tv = claims.get(CLAIM_TOKEN_VERSION, Number.class);
+            if (tv == null || tv.longValue() != user.getTokenVersion()) return false;
+
+            String uname = claims.get(CLAIM_USERNAME, String.class);
+            // Username embedded in the token must still match the current row —
+            // protects against handing a stale token to a renamed/recreated account.
+            if (uname == null || !uname.equals(user.getUsername())) return false;
+
+            return !user.isBlocked();
         } catch (JwtException | IllegalArgumentException e) {
-            log.warn("Invalid JWT token: {}", e.getMessage());
+            log.debug("JWT validation failed: {}", e.getMessage());
             return false;
         }
     }
 
-    public boolean isTokenValid(String token) {
+    public boolean isTokenParsable(String token) {
         try {
             parseClaims(token);
             return true;
@@ -73,8 +108,12 @@ public class JwtTokenProvider {
         }
     }
 
-    private boolean isTokenExpired(String token) {
-        return parseClaims(token).getExpiration().before(new Date());
+    private Long parseLongSubject(Claims claims) {
+        try {
+            return Long.parseLong(claims.getSubject());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private Claims parseClaims(String token) {

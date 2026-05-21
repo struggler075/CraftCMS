@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 import type {
-  AuthResponse, Category, DonateFeature, DonatePageData, DonateRank, News, Order,
+  AuthResponse, Category, CurrentUser, DonateFeature, DonatePageData, DonateRank, News, Order,
   PaginatedResponse, Product, ServerWithStatus, UserProfile,
 } from '../types'
 
@@ -19,7 +19,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) useAuthStore.getState().logout()
+    // Any 401 from the backend means our persisted session no longer matches the
+    // server's view of the user (deleted, blocked, password rotated, tokenVersion
+    // bumped, expired) — drop the local copy immediately.
+    if (err.response?.status === 401) {
+      const { isAuthenticated, logout } = useAuthStore.getState()
+      if (isAuthenticated) logout()
+    }
     return Promise.reject(err)
   }
 )
@@ -37,6 +43,8 @@ export const authApi = {
     api.post<{ message: string }>('/auth/forgot-password', { email }).then((r) => r.data),
   resetPassword: (token: string, password: string) =>
     api.post<{ message: string }>('/auth/reset-password', { token, password }).then((r) => r.data),
+  me: () => api.get<CurrentUser>('/auth/me').then((r) => r.data),
+  logoutAll: () => api.post<{ message: string }>('/auth/logout-all').then((r) => r.data),
 }
 
 export const totpApi = {
@@ -149,6 +157,48 @@ export const adminUsersApi = {
   update: (id: number, data: { role?: string; balance?: number; newPassword?: string; blocked?: boolean; blockReason?: string }) =>
     api.put<AdminUser>(`/admin/users/${id}`, data).then((r) => r.data),
   delete: (id: number) => api.delete(`/admin/users/${id}`),
+}
+
+export type AuditAction =
+  | 'USER_BALANCE_CHANGE'
+  | 'USER_PASSWORD_RESET'
+  | 'USER_ROLE_CHANGE'
+  | 'USER_BLOCK'
+  | 'USER_UNBLOCK'
+  | 'USER_DELETE'
+  | 'USER_FORCE_LOGOUT'
+
+export interface AuditLogEntry {
+  id: number
+  timestamp: string
+  actorId: number
+  actorUsername: string
+  action: AuditAction
+  targetId: number | null
+  targetUsername: string | null
+  details: string | null
+  ip: string | null
+}
+
+export interface AuditLogPage {
+  content: AuditLogEntry[]
+  totalElements: number
+  totalPages: number
+  number: number
+}
+
+export const adminAuditApi = {
+  list: (params: {
+    action?: AuditAction
+    actorId?: number
+    targetId?: number
+    from?: string
+    to?: string
+    search?: string
+    page?: number
+    size?: number
+  }) => api.get<AuditLogPage>('/admin/audit-logs', { params }).then((r) => r.data),
+  actions: () => api.get<AuditAction[]>('/admin/audit-logs/actions').then((r) => r.data),
 }
 
 export const donateApi = {

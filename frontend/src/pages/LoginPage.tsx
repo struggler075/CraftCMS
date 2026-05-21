@@ -129,11 +129,6 @@ export default function LoginPage() {
                     </Link>
                   </p>
                 </div>
-                <div className="mt-3 px-4 py-2.5 rounded-lg bg-c-bg2 border border-c-border text-center">
-                  <p className="text-xs text-c-t3">
-                    Демо: <span className="text-c-gold">admin / Admin123!</span> (ADMIN)
-                  </p>
-                </div>
               </motion.div>
             ) : (
               <motion.div key="totp" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>

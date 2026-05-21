@@ -1,0 +1,35 @@
+# Production profile — PostgreSQL. Connection details are expected to come
+# from environment variables / external application.yml written by install.sh:
+#   SPRING_DATASOURCE_URL      jdbc:postgresql://127.0.0.1:5432/craftcms
+#   SPRING_DATASOURCE_USERNAME craftcms
+#   SPRING_DATASOURCE_PASSWORD <generated or operator-supplied>
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5432/craftcms}
+    driver-class-name: org.postgresql.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:craftcms}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  h2:
+    console:
+      enabled: false
+
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          lob:
+            non_contextual_creation: true
+
+logging:
+  level:
+    com.craftcms: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useSiteSettings } from '../../store/siteSettingsStore'
 import {
   LayoutDashboard, Package, Server, Newspaper,
-  Tag, LogOut, ArrowLeft, ShieldCheck, Download, Settings, Gem, Users, Menu, X, Plug, CreditCard
+  Tag, LogOut, ArrowLeft, ShieldCheck, Download, Settings, Gem, Users, Menu, X, Plug, CreditCard, Activity
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useEffect, useState } from 'react'
@@ -19,6 +19,7 @@ const navItems = [
   { label: 'Пользователи', href: '/admin/users', icon: Users },
   { label: 'Донат', href: '/admin/donate', icon: Gem },
   { label: 'Платежи', href: '/admin/payments', icon: CreditCard },
+  { label: 'Логи', href: '/admin/logs', icon: Activity },
   { label: 'Настройки', href: '/admin/settings', icon: Settings },
   { label: 'Серверный Плагин', href: '/admin/bridge', icon: Plug },
 ]

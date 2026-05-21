@@ -39,6 +39,16 @@ export default function SkinViewer({ skinUrl, capeUrl, width = 200, height = 280
         cape: capeUrl ?? undefined,
       })
 
+      // skin3d adds a three.js FXAA post-process pass, whose shader uses
+      // texture2D(tex, uv, -100.0) to force mip level 0. On Windows the
+      // D3D11/ANGLE backend clamps that to [-16, 15.99] and emits an X4713
+      // warning per frame. Skins use NearestFilter anyway — FXAA on a pixel-art
+      // texture does nothing visible, so drop the pass to silence the warning.
+      const v = viewerRef.current as { composer?: { passes: unknown[] }; fxaaPass?: unknown }
+      if (v.composer && v.fxaaPass) {
+        v.composer.passes = v.composer.passes.filter((p) => p !== v.fxaaPass)
+      }
+
       viewerRef.current.autoRotate = true
       viewerRef.current.animation = new WalkingAnimation()
     }).catch(console.error)

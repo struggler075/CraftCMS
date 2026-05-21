@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { Eye, EyeOff, KeyRound, ArrowLeft } from 'lucide-react'
 import { authApi } from '../services/api'
 import PageTransition from '../components/layout/PageTransition'
+import PasswordStrengthMeter from '../components/auth/PasswordStrengthMeter'
 import toast from 'react-hot-toast'
 
 export default function ResetPasswordPage() {
@@ -92,6 +93,11 @@ export default function ResetPasswordPage() {
                     {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {password && (
+                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-2">
+                    <PasswordStrengthMeter password={password} />
+                  </motion.div>
+                )}
               </div>
 
               <div>
