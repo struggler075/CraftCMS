@@ -76,12 +76,15 @@ public class OrderService {
 
     private OrderDto toDto(Order order) {
         Product product = order.getProduct();
-        var server = product.getServer();
+        // Defensive null-checks — historical orders may reference a product
+        // that was later soft-deleted or had its category/server detached.
+        var server   = product != null ? product.getServer()   : null;
+        var category = product != null ? product.getCategory() : null;
         return OrderDto.builder()
                 .id(order.getId())
-                .productName(product.getName())
-                .productImageUrl(product.getImageUrl())
-                .categoryName(product.getCategory().getName())
+                .productName(product != null ? product.getName() : "(удалён)")
+                .productImageUrl(product != null ? product.getImageUrl() : null)
+                .categoryName(category != null ? category.getName() : null)
                 .quantity(order.getQuantity())
                 .totalPrice(order.getTotalPrice())
                 .status(order.getStatus())
