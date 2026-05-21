@@ -103,10 +103,29 @@ public class ProductService {
         return serverRepository.findById(serverId).orElse(null);
     }
 
+    /**
+     * Trash-can behaviour: try to nuke the row entirely so the admin list
+     * stays clean. If the product is referenced by orders (FK from orders),
+     * the hard delete would orphan history — in that case fall back to a
+     * tombstone (deleted=true, active=false). Tombstones are invisible
+     * everywhere (admin list + public shop) so they don't pollute the UI,
+     * but the row itself survives to keep order history valid.
+     *
+     * Trash = "I want this gone for good".
+     * The "Активен" checkbox in the modal = "temporarily hide, I'll bring
+     * it back later".
+     */
     @Transactional
     public void delete(Long id) {
-        Product product = getById(id);
-        product.setActive(false);
-        productRepository.save(product);
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Product not found: " + id));
+        try {
+            productRepository.delete(product);
+            productRepository.flush();   // surface FK violations now, not later
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            product.setDeleted(true);
+            product.setActive(false);
+            productRepository.save(product);
+        }
     }
 }

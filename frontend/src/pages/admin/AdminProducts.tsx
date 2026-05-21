@@ -172,8 +172,17 @@ export default function AdminProducts() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Удалить товар?')) return
-    await productsApi.delete(id); toast.success('Товар удалён'); load()
+    if (!confirm('Удалить товар? Действие нельзя отменить.')) return
+    try {
+      await productsApi.delete(id)
+      toast.success('Товар удалён')
+      load()
+    } catch (err: unknown) {
+      // Backend returns 400 with a useful message when the product is
+      // referenced by orders — surface it instead of a generic "Ошибка".
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(msg ?? 'Не удалось удалить товар')
+    }
   }
 
   const F = form as Record<string, unknown>

@@ -75,15 +75,19 @@ public class OrderService {
     }
 
     private OrderDto toDto(Order order) {
+        Product product = order.getProduct();
+        var server = product.getServer();
         return OrderDto.builder()
                 .id(order.getId())
-                .productName(order.getProduct().getName())
-                .productImageUrl(order.getProduct().getImageUrl())
-                .categoryName(order.getProduct().getCategory().getName())
+                .productName(product.getName())
+                .productImageUrl(product.getImageUrl())
+                .categoryName(product.getCategory().getName())
                 .quantity(order.getQuantity())
                 .totalPrice(order.getTotalPrice())
                 .status(order.getStatus())
                 .createdAt(order.getCreatedAt())
+                .serverId(server != null ? server.getId() : null)
+                .serverName(server != null ? server.getName() : null)
                 .build();
     }
 }

@@ -58,6 +58,16 @@ public class Product {
     @Builder.Default
     private Boolean active = true;
 
+    /**
+     * Set when the admin presses the trash-can but the row can't be hard-deleted
+     * because purchase orders still reference it. Treated as "gone" everywhere —
+     * hidden from the public shop AND from the admin list — but the row itself
+     * survives so order history stays intact.
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean deleted = false;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private ProductType type = ProductType.ITEM;

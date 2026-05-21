@@ -93,9 +93,9 @@ export default function ServerSelectGrid({ title, subtitle, onPick }: Props) {
               <p className="text-xs text-c-t2 mt-1.5 line-clamp-2 min-h-[2rem]">
                 {s.description || ' '}
               </p>
-              {/* Mods line: same height whether shown or not. */}
+              {/* Mods line: always shown (zero is meaningful info — "vanilla"). */}
               <p className="text-[11px] text-c-t3 mt-2 h-4 leading-4">
-                {s.mods && s.mods.length > 0 ? `Модов: ${s.mods.length}` : ''}
+                Модов: {s.mods?.length ?? 0}
               </p>
             </div>
           </motion.button>

@@ -18,4 +18,7 @@ public class OrderDto {
     private BigDecimal totalPrice;
     private OrderStatus status;
     private LocalDateTime createdAt;
+    /** Server the product was bought for, null if it's a global item. */
+    private Long serverId;
+    private String serverName;
 }

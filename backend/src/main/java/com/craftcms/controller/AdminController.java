@@ -29,7 +29,11 @@ public class AdminController {
     // ── Products ──────────────────────────────────────────────────────────────
     @GetMapping("/products")
     public ResponseEntity<List<Product>> getAllProducts() {
-        return ResponseEntity.ok(productRepository.findAll());
+        // Hide tombstones (deleted=true) — they only exist to keep order
+        // history's foreign keys valid; the admin shouldn't see them at all.
+        return ResponseEntity.ok(productRepository.findByDeletedFalse(
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC, "createdAt")));
     }
 
     @PostMapping("/products")
