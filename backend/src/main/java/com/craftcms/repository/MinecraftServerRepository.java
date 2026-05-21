@@ -6,8 +6,13 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+import java.util.Optional;
+
 @Repository
 public interface MinecraftServerRepository extends JpaRepository<MinecraftServer, Long> {
     List<MinecraftServer> findByActiveTrueOrderBySortOrderAsc();
     List<MinecraftServer> findByActiveTrueAndFeaturedTrue();
+
+    /** Used by BridgeController to identify which server a plugin request came from. */
+    Optional<MinecraftServer> findByBridgeApiKey(String bridgeApiKey);
 }

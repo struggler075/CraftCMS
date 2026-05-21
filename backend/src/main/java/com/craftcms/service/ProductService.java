@@ -26,11 +26,14 @@ public class ProductService {
 
     public Page<Product> getProducts(String categorySlug, Long serverId, Pageable pageable) {
         boolean hasCategory = categorySlug != null && !categorySlug.isBlank();
+        // When a server is picked we want: products of this server PLUS global
+        // (server=NULL) products — common items like currency should appear
+        // in every server's shop without manual duplication.
         if (serverId != null && hasCategory) {
-            return productRepository.findByActiveTrueAndServerIdAndCategorySlug(serverId, categorySlug, pageable);
+            return productRepository.findActiveForServerAndCategory(serverId, categorySlug, pageable);
         }
         if (serverId != null) {
-            return productRepository.findByActiveTrueAndServerId(serverId, pageable);
+            return productRepository.findActiveForServer(serverId, pageable);
         }
         if (hasCategory) {
             return productRepository.findByActiveTrueAndCategorySlug(categorySlug, pageable);

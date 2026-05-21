@@ -82,20 +82,21 @@ export default function ServerSelectGrid({ title, subtitle, onPick }: Props) {
               )}
             </div>
 
-            {/* Body */}
+            {/* Body — fixed-height reserved rows so cards stay the same size
+                regardless of whether description/mods are present. */}
             <div className="p-4">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-base font-semibold text-c-text truncate">{s.name}</h3>
                 <ChevronRight className="w-4 h-4 text-c-t3 group-hover:text-c-primary transition-colors shrink-0" />
               </div>
-              {s.description && (
-                <p className="text-xs text-c-t2 mt-1.5 line-clamp-2">{s.description}</p>
-              )}
-              {s.mods && s.mods.length > 0 && (
-                <p className="text-[11px] text-c-t3 mt-2">
-                  Модов: {s.mods.length}
-                </p>
-              )}
+              {/* Description: always two lines tall, even when empty. */}
+              <p className="text-xs text-c-t2 mt-1.5 line-clamp-2 min-h-[2rem]">
+                {s.description || ' '}
+              </p>
+              {/* Mods line: same height whether shown or not. */}
+              <p className="text-[11px] text-c-t3 mt-2 h-4 leading-4">
+                {s.mods && s.mods.length > 0 ? `Модов: ${s.mods.length}` : ''}
+              </p>
             </div>
           </motion.button>
         ))}

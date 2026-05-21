@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Plug, RefreshCw, Copy, Check, Download, Shield,
-  Network, AlertTriangle, CheckCircle, Package
+  Network, AlertTriangle, CheckCircle, Package, Server as ServerIcon
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import api from '../../services/api'
+import api, { serversApi } from '../../services/api'
+import type { ServerWithStatus } from '../../types'
 
 interface BridgeStatus {
   templateFound: boolean
   templatePath: string
   apiKey: string
+  serverId: number | null
+  serverName: string | null
   allowedIp: string
   backendUrl: string
   detectedUrl: string
@@ -20,6 +23,8 @@ interface BridgeStatus {
 export default function AdminBridgePlugin() {
   const [status, setStatus] = useState<BridgeStatus | null>(null)
   const [loading, setLoading] = useState(true)
+  const [servers, setServers] = useState<ServerWithStatus[]>([])
+  const [selectedServerId, setSelectedServerId] = useState<number | ''>('')
   const [apiKey, setApiKey] = useState('')
   const [allowedIp, setAllowedIp] = useState('')
   const [backendUrl, setBackendUrl] = useState('')
@@ -28,9 +33,11 @@ export default function AdminBridgePlugin() {
   const [copied, setCopied] = useState(false)
   const [generating, setGenerating] = useState(false)
 
-  const fetchStatus = async () => {
+  const fetchStatus = async (serverId?: number) => {
     try {
-      const res = await api.get<BridgeStatus>('/admin/bridge/status')
+      const res = await api.get<BridgeStatus>('/admin/bridge/status', {
+        params: serverId ? { serverId } : {},
+      })
       setStatus(res.data)
       setApiKey(res.data.apiKey)
       setAllowedIp(res.data.allowedIp)
@@ -42,7 +49,29 @@ export default function AdminBridgePlugin() {
     }
   }
 
-  useEffect(() => { fetchStatus() }, [])
+  // First load: pull servers and pre-select the first one.
+  useEffect(() => {
+    serversApi.getAll().then((all) => {
+      setServers(all)
+      const first = all[0]?.id
+      if (first != null) {
+        setSelectedServerId(first)
+        fetchStatus(first)
+      } else {
+        // No servers yet — fall back to legacy global mode.
+        fetchStatus()
+      }
+    }).catch(() => {
+      fetchStatus()
+    })
+  }, [])
+
+  // Switching server → reload that server's key.
+  const handleServerChange = (id: number | '') => {
+    setSelectedServerId(id)
+    setLoading(true)
+    fetchStatus(typeof id === 'number' ? id : undefined)
+  }
 
   const handleGenerateKey = async () => {
     setGenerating(true)
@@ -71,9 +100,12 @@ export default function AdminBridgePlugin() {
     }
     setSaving(true)
     try {
-      await api.put('/admin/bridge/settings', { apiKey, allowedIp, backendUrl })
+      await api.put('/admin/bridge/settings', {
+        serverId: typeof selectedServerId === 'number' ? selectedServerId : null,
+        apiKey, allowedIp, backendUrl,
+      })
       toast.success('Настройки сохранены')
-      await fetchStatus()
+      await fetchStatus(typeof selectedServerId === 'number' ? selectedServerId : undefined)
     } catch {
       toast.error('Ошибка сохранения')
     } finally {
@@ -88,14 +120,18 @@ export default function AdminBridgePlugin() {
     }
     setDownloading(true)
     try {
-      const res = await api.get('/admin/bridge/download', { responseType: 'blob' })
+      const params = typeof selectedServerId === 'number' ? { serverId: selectedServerId } : {}
+      const res = await api.get('/admin/bridge/download', { responseType: 'blob', params })
       const url = window.URL.createObjectURL(new Blob([res.data]))
       const a = document.createElement('a')
       a.href = url
-      a.download = 'BridgePlugin.jar'
+      const filename = typeof selectedServerId === 'number'
+        ? `BridgePlugin-server${selectedServerId}.jar`
+        : 'BridgePlugin.jar'
+      a.download = filename
       a.click()
       window.URL.revokeObjectURL(url)
-      toast.success('BridgePlugin.jar скачан')
+      toast.success(`${filename} скачан`)
     } catch {
       toast.error('Ошибка скачивания плагина')
     } finally {
@@ -125,8 +161,37 @@ export default function AdminBridgePlugin() {
           Серверный Плагин
         </h1>
         <p className="text-sm text-c-t3 mt-1">
-          Настройте Bridge-плагин и скачайте готовый JAR с захардкоженным ключом
+          Каждому серверу — свой JAR с уникальным ключом. Выберите сервер ниже и скачайте его плагин.
         </p>
+      </div>
+
+      {/* Server selector */}
+      <div className="bg-c-bg1 border border-c-border rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <ServerIcon className="w-4 h-4 text-c-primary" />
+          <h2 className="text-sm font-semibold text-c-text">Для какого сервера</h2>
+        </div>
+        {servers.length === 0 ? (
+          <p className="text-sm text-c-t3">
+            Сначала добавьте сервер в вкладке «Серверы». Без сервера плагин выдаётся в legacy-режиме (общий ключ).
+          </p>
+        ) : (
+          <>
+            <select
+              value={selectedServerId}
+              onChange={(e) => handleServerChange(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+              className="w-full bg-c-bg2 border border-c-border rounded-lg px-3 py-2 text-sm text-c-text cursor-pointer focus:outline-none focus:border-c-primary/50"
+            >
+              {servers.map((s) => (
+                <option key={s.id} value={s.id} className="bg-c-bg2">{s.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-c-t3 mt-2">
+              Каждый сервер имеет свой ключ. При покупке товара бэкенд направит команду
+              именно тому серверу, который указан у этого товара/ранга.
+            </p>
+          </>
+        )}
       </div>
 
       {/* Template status card */}

@@ -42,6 +42,15 @@ public class MinecraftServer {
     @Builder.Default
     private PingMethod pingMethod = PingMethod.MCSRVSTAT;
 
+    /**
+     * Per-server Bridge plugin API key. Patched into the JAR when an admin
+     * downloads the plugin for THIS server. The Minecraft side then identifies
+     * itself by this key on every callback, so the backend knows which server
+     * the request is from and which orders to route to which world.
+     */
+    @Column(length = 128)
+    private String bridgeApiKey;
+
     @OneToMany(mappedBy = "server", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Builder.Default
     private List<ServerMod> mods = new ArrayList<>();

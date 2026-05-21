@@ -47,8 +47,10 @@ public class DonateController {
     public PageDto getPage(@RequestParam(required = false) Long serverId) {
         var features = featureRepo.findAllByOrderBySortOrderAsc()
                 .stream().map(f -> new FeatureDto(f.getId(), f.getName(), f.getSortOrder())).toList();
+        // When a server is picked: show its ranks + global (server=NULL) ranks.
+        // Without a serverId (legacy / no servers configured): show everything.
         var ranks = (serverId != null
-                ? rankRepo.findByServerIdOrderBySortOrderAsc(serverId)
+                ? rankRepo.findForServerOrdered(serverId)
                 : rankRepo.findAllByOrderBySortOrderAsc())
                 .stream().map(this::toDto).toList();
         return new PageDto(ranks, features);
