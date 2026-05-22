@@ -17,6 +17,11 @@ spring:
         dialect: org.hibernate.dialect.H2Dialect
         format_sql: true
 
+craftcms:
+  backup:
+    # Local dev — write snapshots next to the H2 file rather than /opt/.
+    dir: ./data/backups/site-settings
+
 logging:
   level:
     com.craftcms: DEBUG

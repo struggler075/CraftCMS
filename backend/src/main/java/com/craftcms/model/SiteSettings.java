@@ -1,10 +1,23 @@
 package com.craftcms.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
+
+/**
+ * Singleton entity — by design exactly one row exists with id=1.
+ * The CHECK constraint guarantees no second row can ever be inserted,
+ * even by hand from psql. {@link com.craftcms.service.SiteSettingsService}
+ * always reads/writes that single row.
+ */
 @Entity
-@Table(name = "site_settings")
+@Table(
+        name = "site_settings",
+        uniqueConstraints = @UniqueConstraint(name = "uq_site_settings_singleton", columnNames = "id")
+)
+@org.hibernate.annotations.Check(constraints = "id = 1")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -14,6 +27,7 @@ public class SiteSettings {
 
     @Id
     @Builder.Default
+    @JsonIgnore
     private Long id = 1L;
 
     @Builder.Default
@@ -74,4 +88,23 @@ public class SiteSettings {
               {"title":"Навигация","links":[{"label":"Главная","href":"/"},{"label":"Магазин","href":"/shop"},{"label":"Лаунчер","href":"/launcher"}]},
               {"title":"Поддержка","links":[{"label":"Discord","href":"#"},{"label":"VK","href":"#"},{"label":"Правила","href":"#"},{"label":"Контакты","href":"#"}]}
             ]""";
+
+    /**
+     * Optimistic-lock token. Two admins editing the settings simultaneously will
+     * now get a deterministic 409 instead of silently clobbering each other.
+     * Hibernate manages this column automatically — never set it by hand.
+     */
+    @Version
+    @Builder.Default
+    @JsonIgnore
+    @Column(nullable = false, columnDefinition = "bigint default 0")
+    private Long version = 0L;
+
+    /**
+     * Stamped on every save. Used by the hourly backup task to skip dumping
+     * an identical snapshot, and surfaced in the audit log for diff context.
+     */
+    @Builder.Default
+    @JsonIgnore
+    private Instant updatedAt = Instant.now();
 }

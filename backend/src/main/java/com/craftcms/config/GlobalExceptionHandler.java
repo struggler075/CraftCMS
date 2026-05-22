@@ -1,6 +1,7 @@
 package com.craftcms.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -79,6 +80,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoSuchElementException.class)
     public ResponseEntity<Map<String, String>> handleNotFound(NoSuchElementException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", ex.getMessage()));
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<Map<String, String>> handleConcurrentEdit(OptimisticLockingFailureException ex) {
+        // Two admins edited the same row simultaneously — return 409 so the
+        // client can offer "reload and try again" instead of silently winning.
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "message", "Настройки были изменены другим администратором. Обновите страницу и повторите."));
     }
 
     @ExceptionHandler(Exception.class)

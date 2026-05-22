@@ -36,8 +36,12 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        if (siteSettingsRepository.count() == 0) {
+        // Singleton row id=1. existsById (not count==0) so a stray row at id!=1
+        // can never block seeding — and re-seeding is impossible once id=1 exists.
+        if (!siteSettingsRepository.existsById(1L)) {
+            log.info("Seeding SiteSettings singleton row (id=1) with defaults.");
             siteSettingsRepository.save(SiteSettings.builder()
+                    .id(1L)
                     .bridgeApiKey(UUID.randomUUID().toString())
                     .build());
         }

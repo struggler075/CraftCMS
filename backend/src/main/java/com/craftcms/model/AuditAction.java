@@ -13,4 +13,6 @@ public enum AuditAction {
     USER_UNBLOCK,
     USER_DELETE,
     USER_FORCE_LOGOUT,
+    SETTINGS_UPDATE,
+    SETTINGS_RESTORE,
 }

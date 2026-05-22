@@ -723,7 +723,7 @@ print_ok "Smoke-test БД пройден"
 print_step "Сборка серверной части (Backend)"
 # ══════════════════════════════════════════════════════════════════════════════
 
-mkdir -p "$INSTALL_DIR"/{uploads,logs,frontend}
+mkdir -p "$INSTALL_DIR"/{uploads,logs,frontend,backups/site-settings}
 cd "$SRC_DIR/backend"
 
 # Тёплый прогрев репозитория — отдельно, чтобы понимать что именно тормозит.

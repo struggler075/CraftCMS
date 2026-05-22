@@ -211,6 +211,57 @@ ok "Frontend собран ($(du -sh dist | awk '{print $1}'))"
 FRONTEND_DIST="$SRC_DIR/frontend/dist"
 cd /
 
+# ── Idempotent migrations ─────────────────────────────────────────────────────
+#  Anything that must be in place BEFORE the new jar boots — directories,
+#  permissions, DB constraints. Each step here is safe to re-run.
+step "Миграции (директории, схема БД)"
+
+# 1. site-settings snapshots dir. SiteSettingsBackupService writes here every
+#    hour and before every admin save. Created on fresh installs by install.sh,
+#    but old prod boxes don't have it yet.
+if [[ ! -d "$INSTALL_DIR/backups/site-settings" ]]; then
+  mkdir -p "$INSTALL_DIR/backups/site-settings"
+  chown -R craftcms:craftcms "$INSTALL_DIR/backups"
+  ok "Создана папка снапшотов настроек: $INSTALL_DIR/backups/site-settings"
+else
+  # Always normalise ownership — past installs may have left it as root.
+  chown -R craftcms:craftcms "$INSTALL_DIR/backups" 2>/dev/null || true
+  info "Папка снапшотов уже есть"
+fi
+
+# 2. site_settings CHECK(id = 1). Hibernate's `ddl-auto: update` does NOT
+#    add CHECK constraints to existing tables, so we apply it once manually.
+#    The IF NOT EXISTS guard makes this safe to run on every update.sh.
+#    If the constraint can't be added because real data violates it (extra
+#    rows with id != 1 — which would be the very bug we're fixing), we
+#    surface a loud warning and let the operator decide.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; then
+  PG_DDL=$(docker exec -i craftcms-postgres psql -U craftcms craftcms -tAc \
+    "SELECT 1 FROM pg_constraint WHERE conname='site_settings_singleton_chk'" 2>>"$LOG_FILE" || true)
+  if [[ "$PG_DDL" == "1" ]]; then
+    info "CHECK constraint site_settings_singleton_chk уже существует"
+  else
+    # Check first that current data is compliant — easier to read this
+    # diagnostic in the log than a raw "violates check" error from ALTER.
+    BAD_ROWS=$(docker exec -i craftcms-postgres psql -U craftcms craftcms -tAc \
+      "SELECT COUNT(*) FROM site_settings WHERE id <> 1" 2>>"$LOG_FILE" || echo "?")
+    if [[ "$BAD_ROWS" != "0" ]]; then
+      warn "В site_settings есть ${BAD_ROWS} строк с id<>1 — CHECK не добавляется (нужна ручная очистка)"
+      log_file "Skipping CHECK constraint: ${BAD_ROWS} rows with id<>1"
+    else
+      if docker exec -i craftcms-postgres psql -U craftcms craftcms \
+        -c "ALTER TABLE site_settings ADD CONSTRAINT site_settings_singleton_chk CHECK (id = 1);" \
+        >>"$LOG_FILE" 2>&1; then
+        ok "CHECK constraint site_settings_singleton_chk добавлен"
+      else
+        warn "Не удалось добавить CHECK constraint — смотри лог"
+      fi
+    fi
+  fi
+else
+  warn "Контейнер craftcms-postgres не найден — миграции БД пропущены"
+fi
+
 # ──────────────────────────────────────────────────────────────────────────────
 #  PUBLISH — atomic-ish swap with rollback on service failure
 # ──────────────────────────────────────────────────────────────────────────────

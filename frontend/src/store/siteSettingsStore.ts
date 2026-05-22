@@ -12,7 +12,6 @@ export interface FooterColumn {
 }
 
 export interface SiteSettings {
-  id: number
   siteName: string
   siteDescription: string
   logoUrl: string | null
@@ -30,21 +29,24 @@ export interface SiteSettings {
   bgColor: string
 }
 
-const DEFAULTS: SiteSettings = {
-  id: 1,
-  siteName: 'CraftCMS',
-  siteDescription: 'Лучший Minecraft опыт.',
+// Pre-render placeholder — kept only so consumer components stay TS-safe
+// during the brief window before fetch returns. App.tsx blocks the entire
+// UI tree until `loaded === true`, so these values are NEVER visible.
+// If you ever see "CraftCMS" in the UI, it means `loaded` wasn't checked.
+const PLACEHOLDER: SiteSettings = {
+  siteName: '',
+  siteDescription: '',
   logoUrl: null,
-  copyrightText: 'Все права защищены.',
-  disclaimerText: 'Not affiliated with Mojang Studios',
-  heroTitle: 'Модовый проект нового уровня',
-  heroSubtitle: 'Уникальная сборка модов, балансный геймплей и активное сообщество. Скачайте лаунчер и начните играть за несколько минут.',
+  copyrightText: '',
+  disclaimerText: '',
+  heroTitle: '',
+  heroSubtitle: '',
   donateHeaderImageUrl: null,
   footerColumnsJson: '[]',
-  siteUrl: 'http://localhost:5173',
+  siteUrl: '',
   emailVerificationRequired: false,
-  banKickMessage: '§cВы заблокированы на этом сервере.\n§7Причина: §f{reason}',
-  bridgeApiKey: 'change-me',
+  banKickMessage: '',
+  bridgeApiKey: '',
   primaryColor: '#7c3aed',
   bgColor: '#0a0a0f',
 }
@@ -81,33 +83,59 @@ export function applyColors(primaryColor: string, bgColor: string) {
 interface SiteSettingsState {
   settings: SiteSettings
   loaded: boolean
+  loadError: string | null
   fetch: () => Promise<void>
   update: (s: Partial<SiteSettings>) => Promise<void>
 }
 
-export const useSiteSettings = create<SiteSettingsState>((set) => ({
-  settings: DEFAULTS,
-  loaded: false,
+// Retry policy — exponential backoff capped so transient blips (rolling
+// restart from update.sh, brief nginx reload) recover automatically.
+const RETRY_DELAYS_MS = [0, 500, 1500, 4000, 10000]
 
-  fetch: async () => {
+async function fetchWithRetry(): Promise<SiteSettings> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
+    if (RETRY_DELAYS_MS[attempt] > 0) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]))
+    }
     try {
       const { data } = await api.get<SiteSettings>('/settings')
-      const merged = { ...DEFAULTS } as SiteSettings
-      for (const [k, v] of Object.entries(data)) {
-        if (v !== null && v !== undefined) (merged as unknown as Record<string, unknown>)[k] = v
-      }
-      applyColors(merged.primaryColor, merged.bgColor)
-      set({ settings: merged, loaded: true })
-    } catch {
-      set({ loaded: true })
+      return data
+    } catch (e) {
+      lastError = e
+      // Loud — no more silent "guess the admin meant defaults".
+      // eslint-disable-next-line no-console
+      console.error(`[siteSettings] fetch attempt ${attempt + 1} failed`, e)
+    }
+  }
+  throw lastError
+}
+
+export const useSiteSettings = create<SiteSettingsState>((set) => ({
+  settings: PLACEHOLDER,
+  loaded: false,
+  loadError: null,
+
+  fetch: async () => {
+    set({ loadError: null })
+    try {
+      const data = await fetchWithRetry()
+      applyColors(data.primaryColor, data.bgColor)
+      set({ settings: data, loaded: true, loadError: null })
+    } catch (e) {
+      // Stay in loaded=false. App.tsx surfaces this as the unavailability
+      // screen instead of rendering placeholders to the user.
+      const msg = e instanceof Error ? e.message : 'Не удалось загрузить настройки'
+      set({ loadError: msg })
+      // eslint-disable-next-line no-console
+      console.error('[siteSettings] giving up after retries — settings remain unloaded:', msg)
     }
   },
 
   update: async (incoming) => {
     const { data } = await api.put<SiteSettings>('/admin/settings', incoming)
-    const merged = { ...DEFAULTS, ...data } as SiteSettings
-    applyColors(merged.primaryColor, merged.bgColor)
-    set({ settings: merged })
+    applyColors(data.primaryColor, data.bgColor)
+    set({ settings: data, loaded: true, loadError: null })
   },
 }))
 

@@ -40,6 +40,8 @@ export default function App() {
   const location = useLocation()
   const isAdmin = location.pathname.startsWith('/admin')
   const fetchSettings = useSiteSettings((s) => s.fetch)
+  const settingsLoaded = useSiteSettings((s) => s.loaded)
+  const settingsError = useSiteSettings((s) => s.loadError)
   const { available, countdown, retry } = useBackendHealth()
   const token = useAuthStore((s) => s.token)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -95,6 +97,15 @@ export default function App() {
   }
 
   if (available === null) return null
+
+  // If /api/settings refused to answer after retries, treat it as a backend
+  // outage — same UX as health check failing. Never render the app with
+  // placeholder values: that's the bug we just fixed (CraftCMS → SingleCraft
+  // would briefly appear and the admin would think their settings reset).
+  if (settingsError) {
+    return <SiteUnavailablePage countdown={countdown} onRetry={() => { retry(); fetchSettings() }} />
+  }
+  if (!settingsLoaded) return null
 
   // Hold render until session revalidation finishes — avoids a flash of
   // "authenticated" UI before the backend rejects a stale token.
