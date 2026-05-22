@@ -279,6 +279,35 @@ else
   warn "Контейнер craftcms-postgres не найден — миграции БД пропущены"
 fi
 
+# 4. Versioned SQL migrations from migrations/*.sql. Each file is idempotent
+#    (uses IF NOT EXISTS / OR REPLACE / DO-blocks), so re-running on every
+#    deploy is safe and lets ops just drop new SQL files into the repo
+#    without touching update.sh. Naming convention: NNN-description.sql,
+#    sorted lexicographically so the order is deterministic.
+if [[ -d "$SRC_DIR/migrations" ]] && \
+   docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; then
+  MIGRATION_FILES=$(ls "$SRC_DIR/migrations/"*.sql 2>/dev/null | sort)
+  if [[ -n "$MIGRATION_FILES" ]]; then
+    for sql_file in $MIGRATION_FILES; do
+      fname=$(basename "$sql_file")
+      log_file "Applying migration: $fname"
+      if docker exec -i craftcms-postgres psql -U craftcms craftcms \
+           -v ON_ERROR_STOP=1 -q < "$sql_file" >>"$LOG_FILE" 2>&1; then
+        ok "Миграция $fname применена"
+      else
+        # Pull the last few error lines so the operator sees what broke
+        # without having to open the log file.
+        echo ""
+        echo -e "  ${RED}Последние строки из лога:${NC}"
+        tail -10 "$LOG_FILE" | sed 's/^/    /'
+        err "Миграция $fname упала — деплой остановлен. Полный лог: $LOG_FILE"
+      fi
+    done
+  else
+    info "Миграционных SQL-файлов нет"
+  fi
+fi
+
 # ──────────────────────────────────────────────────────────────────────────────
 #  PUBLISH — atomic-ish swap with rollback on service failure
 # ──────────────────────────────────────────────────────────────────────────────

@@ -70,6 +70,41 @@ public class User implements UserDetails {
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    // ── GravitLauncher SQL auth core ─────────────────────────────────────────
+    //  Gravit's AbstractSQLCoreProvider issues unquoted SELECTs against the
+    //  users table. Postgres lowercases every unquoted identifier, so columns
+    //  MUST be physically named `uuid`, `accesstoken`, `serverid`, `hwidid`
+    //  (no camelCase, no quotes). Each @Column(name=…) pins the wire-level
+    //  name regardless of Hibernate's snake_case naming strategy.
+
+    /**
+     * RFC 4122 UUID, stored as fixed-width CHAR(36). Auto-generated on insert
+     * via {@link #ensureUuid()} — no Postgres extension or trigger needed.
+     */
+    @Column(name = "uuid", unique = true, columnDefinition = "char(36)")
+    private String uuid;
+
+    @Column(name = "accesstoken", columnDefinition = "char(32)")
+    private String accessToken;
+
+    @Column(name = "serverid", length = 41)
+    private String serverID;
+
+    /**
+     * FK to {@code hwids.id}. Declared as a plain Long so neither Spring Boot
+     * nor the Gravit lookup path has to materialise the {@link Hwid} graph
+     * for every user load — Gravit selects this column raw.
+     */
+    @Column(name = "hwidid")
+    private Long hwidid;
+
+    @PrePersist
+    void ensureUuid() {
+        if (uuid == null || uuid.isBlank()) {
+            uuid = java.util.UUID.randomUUID().toString();
+        }
+    }
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));

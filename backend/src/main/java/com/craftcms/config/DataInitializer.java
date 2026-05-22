@@ -63,6 +63,29 @@ public class DataInitializer implements CommandLineRunner {
             log.info("Seeding donate data...");
             seedDonate();
         }
+
+        backfillUserUuids();
+    }
+
+    /**
+     * Hibernate's ddl-auto adds the {@code uuid} column to existing rows as
+     * NULL — but GravitLauncher's SQL auth query (SELECT uuid FROM users …)
+     * will return NULL, which Gravit treats as "no such user" → login fails.
+     * Fill any missing UUID on boot so old accounts authenticate correctly
+     * after the upgrade. Cheap and idempotent: re-running this on every boot
+     * is a no-op once every row has a UUID.
+     */
+    private void backfillUserUuids() {
+        var users = userRepository.findAll();
+        int fixed = 0;
+        for (var u : users) {
+            if (u.getUuid() == null || u.getUuid().isBlank()) {
+                u.setUuid(UUID.randomUUID().toString());
+                userRepository.save(u);
+                fixed++;
+            }
+        }
+        if (fixed > 0) log.info("Backfilled UUID for {} pre-existing users", fixed);
     }
 
     private void seedUsers() {
