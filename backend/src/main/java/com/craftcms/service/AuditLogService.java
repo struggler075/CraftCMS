@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -25,6 +27,13 @@ public class AuditLogService {
         log(currentActor(), action, target, details);
     }
 
+    /**
+     * REQUIRES_NEW so an audit-log INSERT failure (e.g. obsolete CHECK constraint
+     * after the AuditAction enum gained a new value) can never poison the caller's
+     * transaction. The caller writes its row, we write ours independently — and
+     * if ours fails we swallow it locally without rolling back the business op.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void log(User actor, AuditAction action, User target, String details) {
         if (actor == null) {
             // Should never happen for admin-gated routes, but if it does, don't

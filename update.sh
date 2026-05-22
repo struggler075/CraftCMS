@@ -229,7 +229,24 @@ else
   info "Папка снапшотов уже есть"
 fi
 
-# 2. site_settings CHECK(id = 1). Hibernate's `ddl-auto: update` does NOT
+# 2. Drop the obsolete audit_logs.action CHECK constraint.
+#    Hibernate's @Enumerated(EnumType.STRING) bakes in a CHECK with the enum
+#    values that existed when the table was first created. ddl-auto: update
+#    NEVER refreshes it, so adding a new AuditAction value (SETTINGS_UPDATE,
+#    SETTINGS_RESTORE, etc) breaks every INSERT until the constraint is
+#    dropped. The Java enum already validates writes — the DB-level check
+#    is duplicate and a footgun, so we remove it.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; then
+  if docker exec -i craftcms-postgres psql -U craftcms craftcms \
+    -c "ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_check;" \
+    >>"$LOG_FILE" 2>&1; then
+    ok "Сброшен устаревший CHECK на audit_logs.action (если был)"
+  else
+    warn "Не удалось сбросить CHECK audit_logs_action_check — смотри лог"
+  fi
+fi
+
+# 3. site_settings CHECK(id = 1). Hibernate's `ddl-auto: update` does NOT
 #    add CHECK constraints to existing tables, so we apply it once manually.
 #    The IF NOT EXISTS guard makes this safe to run on every update.sh.
 #    If the constraint can't be added because real data violates it (extra
