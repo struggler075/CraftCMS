@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { CreditCard, Save, RefreshCw, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react'
+import { CreditCard, Save, RefreshCw, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, EyeOff, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { adminPaymentApi, type PaymentSettings, type TopUpOrder } from '../../services/api'
+import { useSiteSettings } from '../../store/siteSettingsStore'
 
 type Tab = 'providers' | 'orders' | 'display'
 
@@ -105,6 +106,7 @@ const DEFAULTS: PaymentSettings = {
 
 export default function AdminPayments() {
   const [tab, setTab] = useState<Tab>('providers')
+  const siteUrl = useSiteSettings((s) => s.settings.siteUrl) || window.location.origin
   const [settings, setSettings] = useState<PaymentSettings>(DEFAULTS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -201,13 +203,30 @@ export default function AdminPayments() {
           className="space-y-4"
         >
           {/* Webhook hint */}
-          <div className="card p-4 text-xs text-c-t2 space-y-1">
-            <p className="font-medium text-c-text mb-2">Webhook URL для настройки в личном кабинете платёжной системы:</p>
-            <p><span className="text-c-t3">FreeKassa:</span> <code className="text-c-primary">/api/payments/webhook/freekassa</code></p>
-            <p><span className="text-c-t3">UnitPay:</span> <code className="text-c-primary">/api/payments/webhook/unitpay</code></p>
-            <p><span className="text-c-t3">Stripe:</span> <code className="text-c-primary">/api/payments/webhook/stripe</code></p>
-            <p><span className="text-c-t3">YooKassa:</span> <code className="text-c-primary">/api/payments/webhook/yookassa</code></p>
-            <p><span className="text-c-t3">TradeMC:</span> <code className="text-c-primary">/api/payments/webhook/trademc</code></p>
+          <div className="card p-4 text-xs text-c-t2 space-y-2">
+            <p className="font-medium text-c-text mb-2">Webhook URL (обратный вызов) — укажите в личном кабинете платёжной системы:</p>
+            {[
+              { name: 'FreeKassa', path: '/api/payments/webhook/freekassa' },
+              { name: 'UnitPay', path: '/api/payments/webhook/unitpay' },
+              { name: 'Stripe', path: '/api/payments/webhook/stripe' },
+              { name: 'YooKassa', path: '/api/payments/webhook/yookassa' },
+              { name: 'TradeMC', path: '/api/payments/webhook/trademc' },
+            ].map(({ name, path }) => {
+              const fullUrl = siteUrl.replace(/\/$/, '') + path
+              return (
+                <div key={name} className="flex items-center gap-2">
+                  <span className="text-c-t3 w-20 shrink-0">{name}:</span>
+                  <code className="text-c-primary flex-1 truncate">{fullUrl}</code>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(fullUrl); toast.success('Скопировано') }}
+                    className="p-1 rounded hover:bg-white/5 text-c-t3 hover:text-c-t2 transition-colors cursor-pointer shrink-0"
+                    title="Копировать"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )
+            })}
           </div>
 
           <ProviderCard
@@ -297,8 +316,18 @@ export default function AdminPayments() {
               <p className="font-medium text-c-t2">Как настроить TradeMC:</p>
               <p>1. Создай магазин на <a href="https://trademc.org" target="_blank" rel="noopener noreferrer" className="text-c-primary hover:underline">trademc.org</a></p>
               <p>2. Добавь товар типа «Игровая валюта» с ценой 1₽ за единицу</p>
-              <p>3. В настройках магазина укажи Webhook URL выше</p>
-              <p>4. Скопируй ID магазина, ID товара и ключ сюда</p>
+              <p>3. В настройках магазина → <b className="text-c-t2">Обратный вызов</b> → укажи URL:</p>
+              <div className="flex items-center gap-2 mt-1 mb-1">
+                <code className="text-c-primary bg-c-bg3 px-2 py-1 rounded flex-1 truncate">{siteUrl.replace(/\/$/, '')}/api/payments/webhook/trademc</code>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(siteUrl.replace(/\/$/, '') + '/api/payments/webhook/trademc'); toast.success('Скопировано') }}
+                  className="p-1.5 rounded hover:bg-white/5 text-c-t3 hover:text-c-t2 transition-colors cursor-pointer shrink-0"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <p>4. Скопируй ID магазина, ID товара и ключ магазина сюда</p>
+              <p>5. Нажми «Сохранить»</p>
             </div>
           </ProviderCard>
 
