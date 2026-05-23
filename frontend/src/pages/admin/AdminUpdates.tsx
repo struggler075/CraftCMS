@@ -150,9 +150,9 @@ export default function AdminUpdates() {
   const [applying, setApplying] = useState(false)
   const [showAllHistory, setShowAllHistory] = useState(false)
 
-  const load = () => {
+  const load = (bust = false) => {
     setLoading(true)
-    updatesApi.getStatus()
+    updatesApi.getStatus(bust)
       .then((d) => {
         setData(d)
         if (d.status === 'unconfigured') setFormOpen(true)
@@ -203,7 +203,7 @@ export default function AdminUpdates() {
             <h1 className="text-xl font-semibold text-c-text">Обновления</h1>
           </div>
           {!loading && (
-            <button onClick={load}
+            <button onClick={() => load(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-c-t2 hover:text-c-text border border-c-border hover:border-c-border-h rounded-lg transition-colors cursor-pointer">
               <RefreshCcw className="w-3.5 h-3.5" />
               Обновить

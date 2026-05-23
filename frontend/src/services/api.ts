@@ -288,7 +288,8 @@ export interface UpdatesStatus {
 }
 
 export const updatesApi = {
-  getStatus: () => api.get<UpdatesStatus>('/admin/updates').then((r) => r.data),
+  getStatus: (refresh = false) =>
+    api.get<UpdatesStatus>(`/admin/updates${refresh ? '?refresh=true' : ''}`).then((r) => r.data),
   updateToken: (token: string) =>
     api.put<{ message: string }>('/admin/updates/token', { token }).then((r) => r.data),
   apply: () =>

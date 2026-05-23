@@ -53,7 +53,8 @@ public class AdminUpdatesController {
     // ── GET /api/admin/updates ────────────────────────────────────────────────
 
     @GetMapping
-    public ResponseEntity<UpdatesStatusDto> getStatus() {
+    public ResponseEntity<UpdatesStatusDto> getStatus(
+            @RequestParam(defaultValue = "false") boolean refresh) {
         SiteSettings settings = siteSettingsService.get();
         String token = settings.getGithubToken();
         boolean tokenSet = token != null && !token.isBlank();
@@ -65,7 +66,8 @@ public class AdminUpdatesController {
             ));
         }
 
-        // Serve from cache if still fresh
+        // Serve from cache if still fresh (skip when manual refresh requested)
+        if (refresh) cache = null;
         CacheEntry current = cache;
         if (current != null && current.isValid()) {
             return ResponseEntity.ok(buildDto("active", true, current.pending, current.installed));
@@ -177,8 +179,9 @@ public class AdminUpdatesController {
 
     private SplitResult splitCommits(List<CommitDto> all, String currentSha) {
         if (currentSha == null || currentSha.isBlank()) {
-            // No version file → everything is "installed history", nothing pending
-            return new SplitResult(List.of(), all);
+            // No version.txt → installed version unknown, treat all commits as pending
+            // so the user can apply to write version.txt and establish a baseline.
+            return new SplitResult(all, List.of());
         }
 
         List<CommitDto> pending = new ArrayList<>();
