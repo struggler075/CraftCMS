@@ -39,6 +39,7 @@ public class SiteSettingsService {
     private final SiteSettingsRepository repository;
     private final AuditLogService auditLogService;
     private final SiteSettingsBackupService backupService;
+    private final IndexHtmlPatcher indexHtmlPatcher;
 
     @Transactional(readOnly = true)
     public SiteSettings get() {
@@ -94,6 +95,7 @@ public class SiteSettingsService {
             auditLogService.log(AuditAction.SETTINGS_UPDATE, null, diff);
             log.info("SiteSettings updated by {}: {}", currentActorName(), diff);
         }
+        indexHtmlPatcher.patch(saved);
         return saved;
     }
 

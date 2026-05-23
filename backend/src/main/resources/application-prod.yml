@@ -28,6 +28,10 @@ spring:
           lob:
             non_contextual_creation: true
 
+app:
+  frontend:
+    path: /opt/craftcms/frontend
+
 logging:
   level:
     com.craftcms: INFO
