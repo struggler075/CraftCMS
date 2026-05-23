@@ -2,6 +2,7 @@ package com.craftcms.controller;
 
 import com.craftcms.model.User;
 import com.craftcms.repository.UserRepository;
+import com.craftcms.service.SiteSettingsService;
 import com.craftcms.service.TotpService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,7 @@ public class UserTotpController {
 
     private final TotpService totpService;
     private final UserRepository userRepository;
+    private final SiteSettingsService siteSettingsService;
 
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status(
@@ -37,7 +39,8 @@ public class UserTotpController {
         user.setTotpEnabled(false);
         userRepository.save(user);
 
-        String otpUrl = totpService.getOtpAuthUrl(secret, user.getUsername(), "CraftCMS");
+        String siteName = siteSettingsService.get().getSiteName();
+        String otpUrl = totpService.getOtpAuthUrl(secret, user.getUsername(), siteName);
         return ResponseEntity.ok(Map.of("secret", secret, "otpUrl", otpUrl));
     }
 
