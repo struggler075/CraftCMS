@@ -51,21 +51,32 @@ public class AdminPaymentController {
     private PaymentSettings maskSecrets(PaymentSettings s) {
         PaymentSettings masked = new PaymentSettings();
         masked.setId(s.getId());
+        masked.setTopUpProvider(s.getTopUpProvider());
+        masked.setShowLogosInFooter(s.isShowLogosInFooter());
+
         masked.setFreekassaEnabled(s.isFreekassaEnabled());
         masked.setFreekassaMerchantId(s.getFreekassaMerchantId());
         masked.setFreekassaSecretKey1(mask(s.getFreekassaSecretKey1()));
         masked.setFreekassaSecretKey2(mask(s.getFreekassaSecretKey2()));
+
         masked.setUnitpayEnabled(s.isUnitpayEnabled());
         masked.setUnitpayPublicKey(s.getUnitpayPublicKey());
         masked.setUnitpaySecretKey(mask(s.getUnitpaySecretKey()));
+
         masked.setStripeEnabled(s.isStripeEnabled());
         masked.setStripePublishableKey(s.getStripePublishableKey());
         masked.setStripeSecretKey(mask(s.getStripeSecretKey()));
         masked.setStripeWebhookSecret(mask(s.getStripeWebhookSecret()));
+
         masked.setYookassaEnabled(s.isYookassaEnabled());
         masked.setYookassaShopId(s.getYookassaShopId());
         masked.setYookassaSecretKey(mask(s.getYookassaSecretKey()));
-        masked.setShowLogosInFooter(s.isShowLogosInFooter());
+
+        masked.setTrademcEnabled(s.isTrademcEnabled());
+        masked.setTrademcShopId(s.getTrademcShopId());
+        masked.setTrademcItemId(s.getTrademcItemId());
+        masked.setTrademcShopKey(mask(s.getTrademcShopKey()));
+
         return masked;
     }
 
