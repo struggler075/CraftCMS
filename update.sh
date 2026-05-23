@@ -284,7 +284,7 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; 
     WHERE con.contype = 'c'
       AND nsp.nspname = 'public'
       AND con.conname <> 'site_settings_singleton_chk'
-      AND pg_get_constraintdef(con.oid) ~ '::character varying\\)\\s*= ANY'
+      AND pg_get_constraintdef(con.oid) ~ 'ANY'
   " 2>>"$LOG_FILE" || true)
 
   if [[ -n "$DROPPED" && "$DROPPED" != "" ]]; then
