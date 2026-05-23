@@ -48,13 +48,15 @@ step()  { echo -e "\n${BOLD}${CYAN}━━━ $* ${NC}"; log_file "STEP $*"; }
 info()  { echo -e "  ${DIM}→${NC}  $*"; log_file "INFO $*"; }
 warn()  { echo -e "  ${YELLOW}!${NC}  $*"; log_file "WARN $*"; }
 
+# ── Update lock — prevents deferred agent swap from killing an active update ──
+CMS_UPDATE_LOCK="/var/run/cms-update.lock"
+echo $$ > "$CMS_UPDATE_LOCK"
+
 # ── Service safety net ────────────────────────────────────────────────────────
-# Whatever happens, leave craftcms running. The only window where the service
-# is intentionally down is between "systemctl stop" and "systemctl start";
-# any error in between must NOT leave the user with a dead site.
 SERVICE_WAS_STOPPED=0
 restart_service_on_exit() {
   local code=$?
+  rm -f "$CMS_UPDATE_LOCK"
   if [[ $SERVICE_WAS_STOPPED -eq 1 ]]; then
     if ! systemctl is-active --quiet craftcms; then
       warn "Возвращаем craftcms в работу после прерывания..."
@@ -580,6 +582,15 @@ UPDATER_SVC
         cat > /tmp/_cms_updater_swap.sh << 'SWAP_SCRIPT'
 #!/bin/bash
 sleep 20
+# Wait for any active update.sh to finish (it holds /var/run/cms-update.lock).
+# This prevents killing a concurrent update's WebSocket mid-run.
+waited=0
+while [[ -f /var/run/cms-update.lock ]] && [[ $waited -lt 1200 ]]; do
+  sleep 3
+  waited=$((waited + 3))
+done
+# Give the browser a moment to receive the exit=0 message before we drop the socket.
+sleep 5
 systemctl stop  craftcms-updater 2>/dev/null || true
 sleep 1
 rm -rf /opt/craftcms-updater
