@@ -2,6 +2,7 @@ package com.craftcms.controller;
 
 import com.craftcms.model.SmtpSettings;
 import com.craftcms.service.EmailService;
+import com.craftcms.service.SiteSettingsService;
 import com.craftcms.service.SmtpSettingsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,7 @@ public class SmtpSettingsController {
 
     private final SmtpSettingsService service;
     private final EmailService emailService;
+    private final SiteSettingsService siteSettingsService;
 
     @GetMapping
     public ResponseEntity<SmtpSettings> get() {
@@ -35,7 +37,12 @@ public class SmtpSettingsController {
         if (to == null || to.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Email обязателен"));
         }
-        emailService.sendVerificationEmail(to, "TestUser", "test-token-000", "http://localhost:5173");
+        // Pull the live siteUrl so the test link points at the same host as
+        // real verification emails — otherwise admins see a localhost link
+        // in the test and think the setting was ignored.
+        String siteUrl = siteSettingsService.get().getSiteUrl();
+        if (siteUrl == null || siteUrl.isBlank()) siteUrl = "http://localhost:5173";
+        emailService.sendVerificationEmail(to, "TestUser", "test-token-000", siteUrl);
         return ResponseEntity.ok(Map.of("message", "Тестовое письмо отправлено на " + to));
     }
 }
