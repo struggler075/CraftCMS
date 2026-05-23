@@ -42,6 +42,8 @@ export default function App() {
   const fetchSettings = useSiteSettings((s) => s.fetch)
   const settingsLoaded = useSiteSettings((s) => s.loaded)
   const settingsError = useSiteSettings((s) => s.loadError)
+  const siteName = useSiteSettings((s) => s.settings.siteName)
+  const logoUrl = useSiteSettings((s) => s.settings.logoUrl)
   const { available, countdown, retry } = useBackendHealth()
   const token = useAuthStore((s) => s.token)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -89,6 +91,24 @@ export default function App() {
       })
     return () => { cancelled = true }
   }, [available, token, isAuthenticated])
+
+  useEffect(() => {
+    if (settingsLoaded && siteName) {
+      document.title = siteName
+    }
+  }, [settingsLoaded, siteName])
+
+  useEffect(() => {
+    if (!settingsLoaded || !logoUrl) return
+    let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'icon'
+      document.head.appendChild(link)
+    }
+    link.type = logoUrl.endsWith('.svg') ? 'image/svg+xml' : 'image/png'
+    link.href = logoUrl
+  }, [settingsLoaded, logoUrl])
 
   useEffect(() => { window.scrollTo(0, 0) }, [location.pathname])
 
