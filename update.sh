@@ -100,7 +100,7 @@ run_logged_sh() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-clear
+[[ -t 1 ]] && clear
 echo -e "${BOLD}${CYAN}  CraftCMS — Обновление${NC}"
 echo -e "  ${DIM}──────────────────────────────${NC}"
 echo -e "  ${DIM}Лог: ${LOG_FILE}${NC}"
@@ -440,12 +440,26 @@ SERVICE_WAS_STOPPED=0   # restart handled, EXIT trap won't double-start
 # Record the deployed commit so the admin Updates page can detect newer commits.
 git -C "$SRC_DIR" rev-parse HEAD > "$INSTALL_DIR/version.txt" 2>/dev/null || true
 
-# Ensure nginx has the /updater/ WebSocket proxy block (idempotent, for existing installs).
+# Ensure nginx has the /updater/ WebSocket proxy block on the correct port (idempotent).
 NGINX_SITE="/etc/nginx/sites-available/craftcms"
-if [[ -f "$NGINX_SITE" ]] && ! grep -q 'location /updater/' "$NGINX_SITE"; then
-  sed -i 's|location /api/ {|location /updater/ {\n        proxy_pass http://127.0.0.1:8089/;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_read_timeout 600s;\n    }\n\n    location /api/ {|' "$NGINX_SITE" 2>>"$LOG_FILE" \
-    && ok "Nginx: добавлен блок /updater/ (агент обновлений)" \
-    || warn "Не удалось добавить /updater/ в nginx — добавь вручную"
+if [[ -f "$NGINX_SITE" ]]; then
+  if ! grep -q 'location /updater/' "$NGINX_SITE"; then
+    # Block missing entirely — add it before /api/
+    sed -i 's|location /api/ {|location /updater/ {\n        proxy_pass http://127.0.0.1:8089/;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_read_timeout 600s;\n    }\n\n    location /api/ {|' "$NGINX_SITE" 2>>"$LOG_FILE" \
+      && ok "Nginx: добавлен блок /updater/ (агент обновлений)" \
+      || warn "Не удалось добавить /updater/ в nginx — добавь вручную"
+  else
+    # Block exists — fix port if it points to an old value (8081, 8082, etc.)
+    if ! grep -q 'proxy_pass http://127.0.0.1:8089/' "$NGINX_SITE"; then
+      sed -i 's|proxy_pass http://127\.0\.0\.1:[0-9]\+/;.*# updater\|proxy_pass http://127\.0\.0\.1:808[0-9]/;|proxy_pass http://127.0.0.1:8089/;|g' "$NGINX_SITE" 2>>"$LOG_FILE" || true
+      # Simpler fallback: replace any 808x port in the updater block
+      sed -i '/location \/updater\//,/}/ s|proxy_pass http://127\.0\.0\.1:[0-9]\+/;|proxy_pass http://127.0.0.1:8089/;|' "$NGINX_SITE" 2>>"$LOG_FILE" \
+        && ok "Nginx: обновлён порт /updater/ → 8089" \
+        || warn "Не удалось обновить порт /updater/ в nginx"
+    else
+      info "Nginx: /updater/ уже настроен на порт 8089"
+    fi
+  fi
 fi
 
 systemctl reload nginx 2>>"$LOG_FILE" || true
@@ -582,6 +596,15 @@ UPDATER_SVC
     cd /
   fi
 fi
+
+# Copy maintenance scripts to install dir so they're always up to date
+for _s in update.sh install.sh enable-ssl.sh; do
+  if [[ -f "$SRC_DIR/$_s" ]]; then
+    cp "$SRC_DIR/$_s" "$INSTALL_DIR/$_s"
+    chmod +x "$INSTALL_DIR/$_s"
+    ok "Скрипт обновлён: $INSTALL_DIR/$_s"
+  fi
+done
 
 # Cleanup
 rm -rf "$SRC_DIR" "$BACKUP_DIR"

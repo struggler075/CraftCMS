@@ -1274,6 +1274,15 @@ if [[ "$USE_SSL" == "y" ]]; then
   fi
 fi
 
+# Copy maintenance scripts to install dir
+for _s in update.sh install.sh enable-ssl.sh; do
+  if [[ -f "$SRC_DIR/$_s" ]]; then
+    cp "$SRC_DIR/$_s" "$INSTALL_DIR/$_s"
+    chmod +x "$INSTALL_DIR/$_s"
+    print_ok "Скрипт скопирован: ${INSTALL_DIR}/${_s}"
+  fi
+done
+
 # Cleanup
 rm -rf "$SRC_DIR"
 

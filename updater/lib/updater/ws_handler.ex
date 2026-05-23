@@ -44,6 +44,7 @@ defmodule Updater.WsHandler do
     env = [
       {'GITHUB_TOKEN_ENV', String.to_charlist(github_token)},
       {'HOME', '/root'},
+      {'TERM', 'dumb'},
       {'PATH', '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/maven/bin'}
     ]
 
