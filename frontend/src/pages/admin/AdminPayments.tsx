@@ -11,6 +11,7 @@ const PROVIDER_ABBR: Record<string, string> = {
   UNITPAY: 'UP',
   STRIPE: 'STR',
   YOOKASSA: 'YK',
+  TRADEMC: 'TMC',
 }
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -18,6 +19,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   UNITPAY: 'text-purple-400',
   STRIPE: 'text-indigo-400',
   YOOKASSA: 'text-yellow-400',
+  TRADEMC: 'text-emerald-400',
 }
 
 const STATUS_CONFIG = {
@@ -95,6 +97,7 @@ const DEFAULTS: PaymentSettings = {
   unitpayEnabled: false, unitpayPublicKey: '', unitpaySecretKey: '',
   stripeEnabled: false, stripePublishableKey: '', stripeSecretKey: '', stripeWebhookSecret: '',
   yookassaEnabled: false, yookassaShopId: '', yookassaSecretKey: '',
+  trademcEnabled: false, trademcShopId: '', trademcItemId: '', trademcShopKey: '',
   showLogosInFooter: true,
   topUpProvider: '',
 }
@@ -130,7 +133,7 @@ export default function AdminPayments() {
 
   const patch = (partial: Partial<PaymentSettings>) => setSettings((s) => ({ ...s, ...partial }))
 
-  const selectProvider = (key: 'freekassaEnabled' | 'unitpayEnabled' | 'stripeEnabled' | 'yookassaEnabled', providerValue: string) => {
+  const selectProvider = (key: 'freekassaEnabled' | 'unitpayEnabled' | 'stripeEnabled' | 'yookassaEnabled' | 'trademcEnabled', providerValue: string) => {
     setSettings((s) => {
       const enabling = !s[key]
       return {
@@ -139,6 +142,7 @@ export default function AdminPayments() {
         unitpayEnabled: false,
         stripeEnabled: false,
         yookassaEnabled: false,
+        trademcEnabled: false,
         [key]: enabling,
         topUpProvider: enabling ? providerValue : '',
       }
@@ -203,6 +207,7 @@ export default function AdminPayments() {
             <p><span className="text-c-t3">UnitPay:</span> <code className="text-c-primary">/api/payments/webhook/unitpay</code></p>
             <p><span className="text-c-t3">Stripe:</span> <code className="text-c-primary">/api/payments/webhook/stripe</code></p>
             <p><span className="text-c-t3">YooKassa:</span> <code className="text-c-primary">/api/payments/webhook/yookassa</code></p>
+            <p><span className="text-c-t3">TradeMC:</span> <code className="text-c-primary">/api/payments/webhook/trademc</code></p>
           </div>
 
           <ProviderCard
@@ -267,6 +272,34 @@ export default function AdminPayments() {
             </div>
             <SecretField label="Секретный ключ" value={settings.yookassaSecretKey}
               onChange={(v) => patch({ yookassaSecretKey: v })} />
+          </ProviderCard>
+
+          <ProviderCard
+            title="TradeMC" badge="TRADEMC"
+            enabled={settings.trademcEnabled}
+            onToggle={() => selectProvider('trademcEnabled', 'TRADEMC')}
+          >
+            <div>
+              <label className="block text-xs text-c-t3 mb-1">ID магазина</label>
+              <input className="input" value={settings.trademcShopId}
+                onChange={(e) => patch({ trademcShopId: e.target.value })}
+                placeholder="237754" />
+            </div>
+            <div>
+              <label className="block text-xs text-c-t3 mb-1">ID товара (валюта 1:1)</label>
+              <input className="input" value={settings.trademcItemId}
+                onChange={(e) => patch({ trademcItemId: e.target.value })}
+                placeholder="959912" />
+            </div>
+            <SecretField label="Ключ магазина" value={settings.trademcShopKey}
+              onChange={(v) => patch({ trademcShopKey: v })} />
+            <div className="bg-c-bg2 border border-c-border rounded-xl p-3 text-xs text-c-t3 space-y-1">
+              <p className="font-medium text-c-t2">Как настроить TradeMC:</p>
+              <p>1. Создай магазин на <a href="https://trademc.org" target="_blank" rel="noopener noreferrer" className="text-c-primary hover:underline">trademc.org</a></p>
+              <p>2. Добавь товар типа «Игровая валюта» с ценой 1₽ за единицу</p>
+              <p>3. В настройках магазина укажи Webhook URL выше</p>
+              <p>4. Скопируй ID магазина, ID товара и ключ сюда</p>
+            </div>
           </ProviderCard>
 
           <button
@@ -376,7 +409,10 @@ export default function AdminPayments() {
                   {settings.yookassaEnabled && (
                     <div className="px-3 py-1.5 bg-c-bg2 border border-c-border rounded-lg text-xs font-bold text-yellow-400">ЮKassa</div>
                   )}
-                  {!settings.freekassaEnabled && !settings.unitpayEnabled && !settings.stripeEnabled && !settings.yookassaEnabled && (
+                  {settings.trademcEnabled && (
+                    <div className="px-3 py-1.5 bg-c-bg2 border border-c-border rounded-lg text-xs font-bold text-emerald-400">TradeMC</div>
+                  )}
+                  {!settings.freekassaEnabled && !settings.unitpayEnabled && !settings.stripeEnabled && !settings.yookassaEnabled && !settings.trademcEnabled && (
                     <span className="text-xs text-c-t3">Нет включённых провайдеров</span>
                   )}
                 </div>

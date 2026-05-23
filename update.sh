@@ -229,21 +229,40 @@ else
   info "Папка снапшотов уже есть"
 fi
 
-# 2. Drop the obsolete audit_logs.action CHECK constraint.
+# 2. Drop ALL Hibernate-generated enum CHECK constraints.
 #    Hibernate's @Enumerated(EnumType.STRING) bakes in a CHECK with the enum
-#    values that existed when the table was first created. ddl-auto: update
-#    NEVER refreshes it, so adding a new AuditAction value (SETTINGS_UPDATE,
-#    SETTINGS_RESTORE, etc) breaks every INSERT until the constraint is
-#    dropped. The Java enum already validates writes — the DB-level check
-#    is duplicate and a footgun, so we remove it.
+#    values that existed when the table was FIRST CREATED. ddl-auto: update
+#    NEVER refreshes them, so adding any new enum value to any entity breaks
+#    every INSERT into that table until the constraint is manually dropped.
+#    Java enums already validate writes — these DB-level checks are redundant
+#    and a deployment hazard. Instead of listing constraints by name (which
+#    breaks every time we add a new enum), we auto-detect and drop them all.
+#    We preserve non-enum CHECKs like site_settings_singleton_chk by only
+#    targeting constraints whose definition contains the IN('VALUE1', ...)
+#    pattern that Hibernate generates for @Enumerated columns.
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; then
-  docker exec -i craftcms-postgres psql -U craftcms craftcms -c "
-    ALTER TABLE audit_logs   DROP CONSTRAINT IF EXISTS audit_logs_action_check;
-    ALTER TABLE topup_orders DROP CONSTRAINT IF EXISTS topup_orders_provider_check;
-    ALTER TABLE topup_orders DROP CONSTRAINT IF EXISTS topup_orders_status_check;
-  " >>"$LOG_FILE" 2>&1 \
-    && ok "Сброшены устаревшие enum-CHECK constraints (если были)" \
-    || warn "Не удалось сбросить CHECK constraints — смотри лог"
+  DROPPED=$(docker exec -i craftcms-postgres psql -U craftcms craftcms -tAc "
+    SELECT string_agg(
+      'ALTER TABLE ' || nsp.nspname || '.' || rel.relname ||
+      ' DROP CONSTRAINT ' || con.conname || ';', E'\n'
+    )
+    FROM pg_constraint con
+    JOIN pg_class     rel ON rel.oid = con.conrelid
+    JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+    WHERE con.contype = 'c'
+      AND nsp.nspname = 'public'
+      AND con.conname <> 'site_settings_singleton_chk'
+      AND pg_get_constraintdef(con.oid) ~ '::character varying\\)\\s*= ANY'
+  " 2>>"$LOG_FILE" || true)
+
+  if [[ -n "$DROPPED" && "$DROPPED" != "" ]]; then
+    echo "$DROPPED" | docker exec -i craftcms-postgres psql -U craftcms craftcms >>"$LOG_FILE" 2>&1 \
+      && ok "Сброшены Hibernate enum-CHECK constraints" \
+      || warn "Частично не удалось сбросить CHECK constraints — смотри лог"
+    log_file "Dropped constraints:\n$DROPPED"
+  else
+    info "Hibernate enum-CHECK constraints не найдены (или уже сброшены)"
+  fi
 fi
 
 # 3. site_settings CHECK(id = 1). Hibernate's `ddl-auto: update` does NOT
