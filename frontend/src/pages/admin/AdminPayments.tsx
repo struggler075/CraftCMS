@@ -155,10 +155,6 @@ export default function AdminPayments() {
     setSaving(true)
     try {
       await adminPaymentApi.updateSettings(settings)
-      // Re-fetch from GET to get the authoritative state from DB.
-      // This avoids stale/empty fields from the PUT response.
-      const fresh = await adminPaymentApi.getSettings()
-      setSettings(fresh)
       toast.success('Настройки сохранены')
     } catch { toast.error('Ошибка сохранения') }
     finally { setSaving(false) }
