@@ -139,20 +139,15 @@ export default function AdminPayments() {
 
   const patch = (partial: Partial<PaymentSettings>) => setSettings((s) => ({ ...s, ...partial }))
 
-  const selectProvider = (key: 'freekassaEnabled' | 'unitpayEnabled' | 'stripeEnabled' | 'yookassaEnabled' | 'trademcEnabled', providerValue: string) => {
-    setSettings((s) => {
-      const enabling = !s[key]
-      return {
-        ...s,
-        freekassaEnabled: false,
-        unitpayEnabled: false,
-        stripeEnabled: false,
-        yookassaEnabled: false,
-        trademcEnabled: false,
-        [key]: enabling,
-        topUpProvider: enabling ? providerValue : '',
-      }
-    })
+  // topUpProvider is the single source of truth — both backend and frontend
+  // derive *Enabled booleans from it. Never trust the individual boolean fields.
+  const isActive = (provider: string) => settings.topUpProvider === provider
+
+  const selectProvider = (provider: string) => {
+    setSettings((s) => ({
+      ...s,
+      topUpProvider: s.topUpProvider === provider ? '' : provider,
+    }))
   }
 
   const handleSave = async () => {
@@ -234,8 +229,8 @@ export default function AdminPayments() {
 
           <ProviderCard
             title="FreeKassa" badge="FREEKASSA"
-            enabled={settings.freekassaEnabled}
-            onToggle={() => selectProvider('freekassaEnabled', 'FREEKASSA')}
+            enabled={isActive('FREEKASSA')}
+            onToggle={() => selectProvider('FREEKASSA')}
           >
             <div>
               <label className="block text-xs text-c-t3 mb-1">ID магазина</label>
@@ -251,8 +246,8 @@ export default function AdminPayments() {
 
           <ProviderCard
             title="UnitPay" badge="UNITPAY"
-            enabled={settings.unitpayEnabled}
-            onToggle={() => selectProvider('unitpayEnabled', 'UNITPAY')}
+            enabled={isActive('UNITPAY')}
+            onToggle={() => selectProvider('UNITPAY')}
           >
             <div>
               <label className="block text-xs text-c-t3 mb-1">Публичный ключ проекта</label>
@@ -266,8 +261,8 @@ export default function AdminPayments() {
 
           <ProviderCard
             title="Stripe" badge="STRIPE"
-            enabled={settings.stripeEnabled}
-            onToggle={() => selectProvider('stripeEnabled', 'STRIPE')}
+            enabled={isActive('STRIPE')}
+            onToggle={() => selectProvider('STRIPE')}
           >
             <div>
               <label className="block text-xs text-c-t3 mb-1">Публичный ключ (pk_...)</label>
@@ -283,8 +278,8 @@ export default function AdminPayments() {
 
           <ProviderCard
             title="ЮKassa" badge="YOOKASSA"
-            enabled={settings.yookassaEnabled}
-            onToggle={() => selectProvider('yookassaEnabled', 'YOOKASSA')}
+            enabled={isActive('YOOKASSA')}
+            onToggle={() => selectProvider('YOOKASSA')}
           >
             <div>
               <label className="block text-xs text-c-t3 mb-1">ID магазина</label>
@@ -299,8 +294,8 @@ export default function AdminPayments() {
           {trademcModule && (
             <ProviderCard
               title="TradeMC" badge="TRADEMC"
-              enabled={settings.trademcEnabled}
-              onToggle={() => selectProvider('trademcEnabled', 'TRADEMC')}
+              enabled={isActive('TRADEMC')}
+              onToggle={() => selectProvider('TRADEMC')}
             >
               <div>
                 <label className="block text-xs text-c-t3 mb-1">ID магазина</label>
@@ -431,22 +426,22 @@ export default function AdminPayments() {
               <div className="mt-5 pt-5 border-t border-c-border">
                 <p className="text-xs text-c-t3 mb-3">Предпросмотр:</p>
                 <div className="flex items-center gap-3 flex-wrap">
-                  {settings.freekassaEnabled && (
+                  {isActive('FREEKASSA') && (
                     <div className="px-3 py-1.5 bg-c-bg2 border border-c-border rounded-lg text-xs font-bold text-blue-400">FreeKassa</div>
                   )}
-                  {settings.unitpayEnabled && (
+                  {isActive('UNITPAY') && (
                     <div className="px-3 py-1.5 bg-c-bg2 border border-c-border rounded-lg text-xs font-bold text-purple-400">UnitPay</div>
                   )}
-                  {settings.stripeEnabled && (
+                  {isActive('STRIPE') && (
                     <div className="px-3 py-1.5 bg-c-bg2 border border-c-border rounded-lg text-xs font-bold text-indigo-400">Stripe</div>
                   )}
-                  {settings.yookassaEnabled && (
+                  {isActive('YOOKASSA') && (
                     <div className="px-3 py-1.5 bg-c-bg2 border border-c-border rounded-lg text-xs font-bold text-yellow-400">ЮKassa</div>
                   )}
-                  {settings.trademcEnabled && (
+                  {isActive('TRADEMC') && (
                     <div className="px-3 py-1.5 bg-c-bg2 border border-c-border rounded-lg text-xs font-bold text-emerald-400">TradeMC</div>
                   )}
-                  {!settings.freekassaEnabled && !settings.unitpayEnabled && !settings.stripeEnabled && !settings.yookassaEnabled && !settings.trademcEnabled && (
+                  {!settings.topUpProvider && (
                     <span className="text-xs text-c-t3">Нет включённых провайдеров</span>
                   )}
                 </div>
