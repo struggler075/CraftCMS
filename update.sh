@@ -539,7 +539,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/craftcms-updater
 Environment=HOME=/root
-ExecStart=/opt/craftcms-updater/bin/updater foreground
+ExecStart=/opt/craftcms-updater/bin/updater start
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:/opt/craftcms/logs/craftcms-updater.log
