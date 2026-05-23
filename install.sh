@@ -91,7 +91,7 @@ MAVEN_DIR="/opt/maven"
 M2_HOME="$MAVEN_DIR"
 
 # Step counter (recomputed once everything is known)
-TOTAL_STEPS=13
+TOTAL_STEPS=15
 CURRENT_STEP=0
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -647,6 +647,33 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
+print_step "Установка Erlang / Elixir (агент обновлений)"
+# ══════════════════════════════════════════════════════════════════════════════
+
+ELIXIR_OK=0
+if command -v elixir &>/dev/null && elixir --version 2>/dev/null | grep -qE 'Elixir [1-9]'; then
+  print_ok "Elixir уже установлен ($(elixir --version 2>/dev/null | head -1))"
+  ELIXIR_OK=1
+else
+  spin_run 300 "Установка erlang + elixir..." "
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq erlang elixir
+  " && ELIXIR_OK=1 || print_warn "Не удалось установить Erlang/Elixir — агент обновлений будет пропущен"
+
+  if [[ $ELIXIR_OK -eq 1 ]]; then
+    print_ok "Elixir установлен ($(elixir --version 2>/dev/null | head -1))"
+  fi
+fi
+
+if [[ $ELIXIR_OK -eq 1 ]]; then
+  # Bootstrap Mix package manager tools — needed before mix deps.get / mix release.
+  # Non-fatal: on reinstall they are already present.
+  spin_run 60 "Инициализация hex + rebar3..." "
+    HOME=/root mix local.hex --force --quiet
+    HOME=/root mix local.rebar --force --quiet
+  " || print_warn "hex/rebar bootstrap не удался (продолжаем — mix может уже иметь их)"
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
 print_step "Установка Docker и PostgreSQL"
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -856,6 +883,49 @@ chmod 600 "$INSTALL_DIR/application.yml"
 print_ok "application.yml записан (chmod 600)"
 
 # ══════════════════════════════════════════════════════════════════════════════
+print_step "Сборка агента обновлений (Elixir updater)"
+# ══════════════════════════════════════════════════════════════════════════════
+
+UPDATER_BUILT=0
+if [[ $ELIXIR_OK -eq 0 ]]; then
+  print_warn "Elixir не установлен — агент обновлений пропущен"
+elif [[ ! -d "$SRC_DIR/updater" ]]; then
+  print_warn "updater/ не найден в репозитории — пропускаем"
+else
+  cd "$SRC_DIR/updater"
+  log_file "Building Elixir updater in $(pwd)"
+
+  # mix deps.get — foreground so output is visible in the log
+  echo ""
+  echo -e "  ${CYAN}⟳${NC}  mix deps.get (загрузка зависимостей)..."
+  set +e
+  HOME=/root MIX_ENV=prod mix deps.get --only prod 2>&1 | tee -a "$LOG_FILE"
+  DEPS_RC=${PIPESTATUS[0]}
+  set -e
+
+  if [[ $DEPS_RC -ne 0 ]]; then
+    print_warn "mix deps.get упал (код ${DEPS_RC}) — агент обновлений не собран"
+  else
+    # mix release — foreground
+    echo -e "  ${CYAN}⟳${NC}  mix release (сборка релиза)..."
+    set +e
+    HOME=/root MIX_ENV=prod mix release --overwrite 2>&1 | tee -a "$LOG_FILE"
+    REL_RC=${PIPESTATUS[0]}
+    set -e
+
+    if [[ $REL_RC -ne 0 ]] || [[ ! -d "_build/prod/rel/updater" ]]; then
+      print_warn "mix release упал (код ${REL_RC}) — агент обновлений не собран"
+    else
+      rm -rf /opt/craftcms-updater
+      cp -r "_build/prod/rel/updater" /opt/craftcms-updater
+      print_ok "Elixir updater собран → /opt/craftcms-updater ($(du -sh /opt/craftcms-updater | awk '{print $1}'))"
+      UPDATER_BUILT=1
+    fi
+  fi
+  cd /
+fi
+
+# ══════════════════════════════════════════════════════════════════════════════
 print_step "Сборка визуальной части (Frontend)"
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1021,9 +1091,33 @@ ReadWritePaths=${INSTALL_DIR}
 WantedBy=multi-user.target
 SYSTEMD
 
+cat > /etc/systemd/system/craftcms-updater.service << UPDATER_SYSTEMD
+[Unit]
+Description=CraftCMS Updater — WebSocket update agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/craftcms-updater
+Environment=HOME=/root
+ExecStart=/opt/craftcms-updater/bin/updater foreground
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:${INSTALL_DIR}/logs/craftcms-updater.log
+StandardError=append:${INSTALL_DIR}/logs/craftcms-updater.log
+
+[Install]
+WantedBy=multi-user.target
+UPDATER_SYSTEMD
+
 systemctl daemon-reload
 systemctl enable craftcms >>"$LOG_FILE" 2>&1
-print_ok "systemd unit зарегистрирован"
+if [[ $UPDATER_BUILT -eq 1 ]]; then
+  systemctl enable craftcms-updater >>"$LOG_FILE" 2>&1
+fi
+print_ok "systemd units зарегистрированы"
 
 # ══════════════════════════════════════════════════════════════════════════════
 print_step "Настройка Nginx, файрвола и запуск"
@@ -1047,6 +1141,17 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    location /updater/ {
+        proxy_pass http://127.0.0.1:8081/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_read_timeout 600s;
+        proxy_connect_timeout 10s;
+    }
 
     location /api/ {
         proxy_pass http://127.0.0.1:${BACKEND_PORT};
@@ -1108,6 +1213,12 @@ print_ok "Nginx запущен"
 spin_run 15 "Запуск CraftCMS (Java)..." "systemctl start craftcms" \
   || die "Не удалось запустить craftcms.service" "journalctl -u craftcms -n 50" 4
 print_ok "CraftCMS запускается..."
+
+if [[ $UPDATER_BUILT -eq 1 ]]; then
+  spin_run 15 "Запуск агента обновлений..." "systemctl start craftcms-updater" \
+    && print_ok "craftcms-updater запущен (порт 8081)" \
+    || print_warn "craftcms-updater не запустился — journalctl -u craftcms-updater -n 30"
+fi
 
 # Record installed commit so the admin Updates page knows the current version.
 git -C "$SRC_DIR" rev-parse HEAD > "$INSTALL_DIR/version.txt" 2>/dev/null || true

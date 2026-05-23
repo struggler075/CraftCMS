@@ -479,6 +479,110 @@ else
   err "Откат выполнен. Проверь: journalctl -u craftcms -n 100 --no-pager"
 fi
 
+# ── Elixir updater agent ─────────────────────────────────────────────────────
+# Installs on first run; rebuilds on subsequent runs.
+# If we are running INSIDE the agent (called from the WS terminal), we stage
+# the new release and schedule a deferred swap so the binary isn't replaced
+# under a live process. The swap happens ~20 s after this script exits.
+if [[ -d "$SRC_DIR/updater" ]]; then
+  step "Агент обновлений (Elixir)"
+
+  # ── install Erlang/Elixir if missing (pre-dates this feature) ────────────
+  if ! command -v elixir &>/dev/null; then
+    info "Elixir не найден — устанавливаем..."
+    run_logged_sh "apt install erlang elixir..." 300 \
+      "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq erlang elixir" \
+      || { warn "Не удалось установить Elixir — агент обновлений пропускается"; }
+  fi
+
+  if ! command -v mix &>/dev/null; then
+    warn "mix не найден — агент обновлений пропускается"
+  else
+    # Bootstrap package manager tools (non-fatal — already present on reinstalls)
+    HOME=/root mix local.hex --force --quiet   >>"$LOG_FILE" 2>&1 || true
+    HOME=/root mix local.rebar --force --quiet >>"$LOG_FILE" 2>&1 || true
+
+    cd "$SRC_DIR/updater"
+
+    # ── build ──────────────────────────────────────────────────────────────
+    UPDATER_OK=0
+
+    if run_logged_sh "mix deps.get..." 180 \
+        "HOME=/root MIX_ENV=prod mix deps.get --only prod"; then
+
+      if run_logged_sh "mix release..." 180 \
+          "HOME=/root MIX_ENV=prod mix release --overwrite"; then
+
+        if [[ -d "_build/prod/rel/updater" ]]; then
+          UPDATER_OK=1
+        else
+          warn "mix release завершился без ошибок, но директория релиза не создана"
+        fi
+      else
+        warn "mix release упал — агент обновлений не обновлён (смотри лог)"
+      fi
+    else
+      warn "mix deps.get упал — агент обновлений не обновлён (смотри лог)"
+    fi
+
+    if [[ $UPDATER_OK -eq 1 ]]; then
+      # ── write systemd service (idempotent) ───────────────────────────────
+      if [[ ! -f /etc/systemd/system/craftcms-updater.service ]]; then
+        cat > /etc/systemd/system/craftcms-updater.service << 'UPDATER_SVC'
+[Unit]
+Description=CraftCMS Updater — WebSocket update agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/craftcms-updater
+Environment=HOME=/root
+ExecStart=/opt/craftcms-updater/bin/updater foreground
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/opt/craftcms/logs/craftcms-updater.log
+StandardError=append:/opt/craftcms/logs/craftcms-updater.log
+
+[Install]
+WantedBy=multi-user.target
+UPDATER_SVC
+        systemctl daemon-reload >>"$LOG_FILE" 2>&1 || true
+        systemctl enable craftcms-updater >>"$LOG_FILE" 2>&1 || true
+        ok "craftcms-updater.service зарегистрирован"
+      fi
+
+      # ── swap release binary ──────────────────────────────────────────────
+      if systemctl is-active --quiet craftcms-updater 2>/dev/null; then
+        # Running inside the updater — can't stop ourselves.
+        # Stage new release; deferred background job swaps after we exit.
+        cp -r "_build/prod/rel/updater" /opt/craftcms-updater-new
+        nohup bash -c '
+          sleep 20
+          systemctl stop  craftcms-updater 2>/dev/null || true
+          rm -rf /opt/craftcms-updater
+          mv /opt/craftcms-updater-new /opt/craftcms-updater
+          systemctl start craftcms-updater
+        ' >>/var/log/craftcms-updater-swap.log 2>&1 </dev/null &
+        disown
+        ok "Агент обновлений: новая версия применится через ~20 с"
+      else
+        # Stopped or first install — swap and start immediately.
+        rm -rf /opt/craftcms-updater
+        cp -r "_build/prod/rel/updater" /opt/craftcms-updater
+        if systemctl start craftcms-updater >>"$LOG_FILE" 2>&1; then
+          ok "Агент обновлений запущен (порт 8081)"
+        else
+          warn "craftcms-updater не запустился — journalctl -u craftcms-updater -n 30"
+        fi
+      fi
+    fi
+
+    cd /
+  fi
+fi
+
 # Cleanup
 rm -rf "$SRC_DIR" "$BACKUP_DIR"
 
