@@ -42,6 +42,8 @@ app:
   github:
     repo: struggler075/CraftCMS
 
+  install-dir: /opt/craftcms
+
 feign:
   client:
     config:

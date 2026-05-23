@@ -429,6 +429,9 @@ step "Перезапуск"
 systemctl start craftcms >>"$LOG_FILE" 2>&1 || err "Не удалось запустить craftcms"
 SERVICE_WAS_STOPPED=0   # restart handled, EXIT trap won't double-start
 
+# Record the deployed commit so the admin Updates page can detect newer commits.
+git -C "$SRC_DIR" rev-parse HEAD > "$INSTALL_DIR/version.txt" 2>/dev/null || true
+
 systemctl reload nginx 2>>"$LOG_FILE" || true
 
 # Wait up to 90s for /api/health

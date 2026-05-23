@@ -281,13 +281,18 @@ export interface UpdatesStatus {
   message: string
   tokenSet: boolean
   githubRepo: string | null
-  commits: Commit[]
+  currentVersion: string | null
+  hasUpdates: boolean
+  pendingCommits: Commit[]
+  installedCommits: Commit[]
 }
 
 export const updatesApi = {
   getStatus: () => api.get<UpdatesStatus>('/admin/updates').then((r) => r.data),
   updateToken: (token: string) =>
     api.put<{ message: string }>('/admin/updates/token', { token }).then((r) => r.data),
+  apply: () =>
+    api.post<{ message: string }>('/admin/updates/apply').then((r) => r.data),
 }
 
 export interface PaymentSettings {

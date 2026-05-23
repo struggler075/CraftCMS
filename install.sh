@@ -1109,6 +1109,9 @@ spin_run 15 "Запуск CraftCMS (Java)..." "systemctl start craftcms" \
   || die "Не удалось запустить craftcms.service" "journalctl -u craftcms -n 50" 4
 print_ok "CraftCMS запускается..."
 
+# Record installed commit so the admin Updates page knows the current version.
+git -C "$SRC_DIR" rev-parse HEAD > "$INSTALL_DIR/version.txt" 2>/dev/null || true
+
 # Health check
 echo ""
 print_info "Ждём готовности Java (20-60 сек на холодный старт)..."
