@@ -80,13 +80,13 @@ function ProviderCard({ title, badge, enabled, onToggle, children }: {
           <div>
             <div className="text-sm font-semibold text-c-text">{title}</div>
             <div className={`text-xs mt-0.5 ${enabled ? 'text-c-green' : 'text-c-t3'}`}>
-              {enabled ? 'Включён' : 'Отключён'}
+              {enabled ? 'Активный провайдер' : 'Отключён'}
             </div>
           </div>
         </div>
         <Toggle checked={enabled} onChange={onToggle} />
       </div>
-      <div className={`space-y-3 transition-opacity duration-150 ${enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+      <div className="space-y-3">
         {children}
       </div>
     </div>
@@ -154,8 +154,11 @@ export default function AdminPayments() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const saved = await adminPaymentApi.updateSettings(settings)
-      setSettings(saved)
+      await adminPaymentApi.updateSettings(settings)
+      // Re-fetch from GET to get the authoritative state from DB.
+      // This avoids stale/empty fields from the PUT response.
+      const fresh = await adminPaymentApi.getSettings()
+      setSettings(fresh)
       toast.success('Настройки сохранены')
     } catch { toast.error('Ошибка сохранения') }
     finally { setSaving(false) }
