@@ -311,13 +311,24 @@ public class PaymentService {
                                         String username, String siteUrl) {
         String shopId = s.getTrademcShopId();
         String itemId = s.getTrademcItemId();
+
+        if (itemId == null || itemId.isBlank()) {
+            throw new IllegalStateException("TradeMC: ID товара не настроен. Укажите в Платежи → TradeMC → ID товара");
+        }
+        if (shopId == null || shopId.isBlank()) {
+            throw new IllegalStateException("TradeMC: ID магазина не настроен");
+        }
+
         try {
             String url = "https://api.trademc.org/shop.buyItems"
                     + "?shop=" + enc(shopId)
                     + "&v=3"
-                    + "&items=" + enc(itemId) + ":1"
+                    + "&items=" + itemId + ":1"
                     + "&buyer=" + enc(username)
-                    + "&user_fields[" + enc(itemId) + "][amount]=" + amount.toPlainString();
+                    + "&user_fields[" + itemId + "][amount]=" + amount.toPlainString();
+
+            log.info("TradeMC API call: shopId={}, itemId={}, buyer={}, amount={}", shopId, itemId, username, amount);
+            log.info("TradeMC API URL: {}", url);
 
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(url))
