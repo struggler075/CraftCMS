@@ -443,7 +443,7 @@ git -C "$SRC_DIR" rev-parse HEAD > "$INSTALL_DIR/version.txt" 2>/dev/null || tru
 # Ensure nginx has the /updater/ WebSocket proxy block (idempotent, for existing installs).
 NGINX_SITE="/etc/nginx/sites-available/craftcms"
 if [[ -f "$NGINX_SITE" ]] && ! grep -q 'location /updater/' "$NGINX_SITE"; then
-  sed -i 's|location /api/ {|location /updater/ {\n        proxy_pass http://127.0.0.1:8081/;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_read_timeout 600s;\n    }\n\n    location /api/ {|' "$NGINX_SITE" 2>>"$LOG_FILE" \
+  sed -i 's|location /api/ {|location /updater/ {\n        proxy_pass http://127.0.0.1:8082/;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_read_timeout 600s;\n    }\n\n    location /api/ {|' "$NGINX_SITE" 2>>"$LOG_FILE" \
     && ok "Nginx: добавлен блок /updater/ (агент обновлений)" \
     || warn "Не удалось добавить /updater/ в nginx — добавь вручную"
 fi

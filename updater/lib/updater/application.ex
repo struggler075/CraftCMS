@@ -1,7 +1,7 @@
 defmodule Updater.Application do
   use Application
 
-  @port 8081
+  @port 8082
   @host {127, 0, 0, 1}
 
   @impl true
