@@ -34,6 +34,9 @@ public class PaymentService {
     private final TopUpOrderRepository orderRepository;
     private final UserRepository userRepository;
 
+    @org.springframework.beans.factory.annotation.Value("${app.modules.trademc:true}")
+    private boolean trademcModuleEnabled;
+
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     // ── Settings ─────────────────────────────────────────────────────────────
@@ -312,6 +315,9 @@ public class PaymentService {
         String shopId = s.getTrademcShopId();
         String itemId = s.getTrademcItemId();
 
+        if (!trademcModuleEnabled) {
+            throw new IllegalStateException("Модуль TradeMC отключён в конфигурации сервера");
+        }
         if (itemId == null || itemId.isBlank()) {
             throw new IllegalStateException("TradeMC: ID товара не настроен. Укажите в Платежи → TradeMC → ID товара");
         }
@@ -378,9 +384,13 @@ public class PaymentService {
         log.info("TradeMC webhook body (len={}): {}", rawBody.length(),
                 rawBody.length() > 500 ? rawBody.substring(0, 500) + "..." : rawBody);
 
+        if (!trademcModuleEnabled) {
+            log.warn("TradeMC webhook received but module is disabled in application.yml");
+            return "module disabled";
+        }
         PaymentSettings s = getSettings();
         if (!s.isTrademcEnabled()) {
-            log.warn("TradeMC webhook received but provider is disabled");
+            log.warn("TradeMC webhook received but provider is disabled in admin settings");
             return "disabled";
         }
 

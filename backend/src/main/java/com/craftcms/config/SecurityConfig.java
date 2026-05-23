@@ -55,6 +55,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/payments/**").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/settings").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/settings/payment-logos").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/settings/modules").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/servers/**").permitAll()

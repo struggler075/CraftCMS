@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { CreditCard, Save, RefreshCw, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, EyeOff, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { adminPaymentApi, type PaymentSettings, type TopUpOrder } from '../../services/api'
+import { adminPaymentApi, modulesApi, type PaymentSettings, type TopUpOrder } from '../../services/api'
 import { useSiteSettings } from '../../store/siteSettingsStore'
 
 type Tab = 'providers' | 'orders' | 'display'
@@ -110,6 +110,7 @@ export default function AdminPayments() {
   const [settings, setSettings] = useState<PaymentSettings>(DEFAULTS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [trademcModule, setTrademcModule] = useState(true)
 
   // Orders
   const [orders, setOrders] = useState<TopUpOrder[]>([])
@@ -118,8 +119,11 @@ export default function AdminPayments() {
   const [totalPages, setTotalPages] = useState(0)
 
   useEffect(() => {
-    adminPaymentApi.getSettings()
-      .then(setSettings)
+    Promise.all([
+      adminPaymentApi.getSettings(),
+      modulesApi.get().catch(() => ({ trademc: true })),
+    ])
+      .then(([s, m]) => { setSettings(s); setTrademcModule(m.trademc) })
       .catch(() => toast.error('Ошибка загрузки настроек'))
       .finally(() => setLoading(false))
   }, [])
@@ -292,43 +296,45 @@ export default function AdminPayments() {
               onChange={(v) => patch({ yookassaSecretKey: v })} />
           </ProviderCard>
 
-          <ProviderCard
-            title="TradeMC" badge="TRADEMC"
-            enabled={settings.trademcEnabled}
-            onToggle={() => selectProvider('trademcEnabled', 'TRADEMC')}
-          >
-            <div>
-              <label className="block text-xs text-c-t3 mb-1">ID магазина</label>
-              <input className="input" value={settings.trademcShopId}
-                onChange={(e) => patch({ trademcShopId: e.target.value })}
-                placeholder="237754" />
-            </div>
-            <div>
-              <label className="block text-xs text-c-t3 mb-1">ID товара (валюта 1:1)</label>
-              <input className="input" value={settings.trademcItemId}
-                onChange={(e) => patch({ trademcItemId: e.target.value })}
-                placeholder="959912" />
-            </div>
-            <SecretField label="Ключ магазина" value={settings.trademcShopKey}
-              onChange={(v) => patch({ trademcShopKey: v })} />
-            <div className="bg-c-bg2 border border-c-border rounded-xl p-3 text-xs text-c-t3 space-y-1">
-              <p className="font-medium text-c-t2">Как настроить TradeMC:</p>
-              <p>1. Создай магазин на <a href="https://trademc.org" target="_blank" rel="noopener noreferrer" className="text-c-primary hover:underline">trademc.org</a></p>
-              <p>2. Добавь товар типа «Игровая валюта» с ценой 1₽ за единицу</p>
-              <p>3. В настройках магазина → <b className="text-c-t2">Обратный вызов</b> → укажи URL:</p>
-              <div className="flex items-center gap-2 mt-1 mb-1">
-                <code className="text-c-primary bg-c-bg3 px-2 py-1 rounded flex-1 truncate">{siteUrl.replace(/\/$/, '')}/api/payments/webhook/trademc</code>
-                <button
-                  onClick={() => { navigator.clipboard.writeText(siteUrl.replace(/\/$/, '') + '/api/payments/webhook/trademc'); toast.success('Скопировано') }}
-                  className="p-1.5 rounded hover:bg-white/5 text-c-t3 hover:text-c-t2 transition-colors cursor-pointer shrink-0"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </button>
+          {trademcModule && (
+            <ProviderCard
+              title="TradeMC" badge="TRADEMC"
+              enabled={settings.trademcEnabled}
+              onToggle={() => selectProvider('trademcEnabled', 'TRADEMC')}
+            >
+              <div>
+                <label className="block text-xs text-c-t3 mb-1">ID магазина</label>
+                <input className="input" value={settings.trademcShopId}
+                  onChange={(e) => patch({ trademcShopId: e.target.value })}
+                  placeholder="237754" />
               </div>
-              <p>4. Скопируй ID магазина, ID товара и ключ магазина сюда</p>
-              <p>5. Нажми «Сохранить»</p>
-            </div>
-          </ProviderCard>
+              <div>
+                <label className="block text-xs text-c-t3 mb-1">ID товара (валюта 1:1)</label>
+                <input className="input" value={settings.trademcItemId}
+                  onChange={(e) => patch({ trademcItemId: e.target.value })}
+                  placeholder="959912" />
+              </div>
+              <SecretField label="Ключ магазина" value={settings.trademcShopKey}
+                onChange={(v) => patch({ trademcShopKey: v })} />
+              <div className="bg-c-bg2 border border-c-border rounded-xl p-3 text-xs text-c-t3 space-y-1">
+                <p className="font-medium text-c-t2">Как настроить TradeMC:</p>
+                <p>1. Создай магазин на <a href="https://trademc.org" target="_blank" rel="noopener noreferrer" className="text-c-primary hover:underline">trademc.org</a></p>
+                <p>2. Добавь товар типа «Игровая валюта» с ценой 1₽ за единицу</p>
+                <p>3. В настройках магазина → <b className="text-c-t2">Обратный вызов</b> → укажи URL:</p>
+                <div className="flex items-center gap-2 mt-1 mb-1">
+                  <code className="text-c-primary bg-c-bg3 px-2 py-1 rounded flex-1 truncate">{siteUrl.replace(/\/$/, '')}/api/payments/webhook/trademc</code>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(siteUrl.replace(/\/$/, '') + '/api/payments/webhook/trademc'); toast.success('Скопировано') }}
+                    className="p-1.5 rounded hover:bg-white/5 text-c-t3 hover:text-c-t2 transition-colors cursor-pointer shrink-0"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p>4. Скопируй ID магазина, ID товара и ключ магазина сюда</p>
+                <p>5. Нажми «Сохранить»</p>
+              </div>
+            </ProviderCard>
+          )}
 
           <button
             onClick={handleSave}

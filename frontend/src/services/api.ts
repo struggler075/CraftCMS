@@ -303,6 +303,14 @@ export interface TopUpOrder {
   completedAt: string | null
 }
 
+export interface ModulesConfig {
+  trademc: boolean
+}
+
+export const modulesApi = {
+  get: () => api.get<ModulesConfig>('/settings/modules').then((r) => r.data),
+}
+
 export const paymentApi = {
   initiate: (amount: number) =>
     api.post<{ redirectUrl: string }>('/payments/initiate', { amount }).then((r) => r.data),

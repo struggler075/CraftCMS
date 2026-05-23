@@ -5,6 +5,7 @@ import com.craftcms.model.SiteSettings;
 import com.craftcms.service.PaymentService;
 import com.craftcms.service.SiteSettingsService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +17,9 @@ public class SiteSettingsController {
 
     private final SiteSettingsService service;
     private final PaymentService paymentService;
+
+    @Value("${app.modules.trademc:true}")
+    private boolean trademcModuleEnabled;
 
     @GetMapping("/api/settings")
     public ResponseEntity<SiteSettings> get() {
@@ -36,8 +40,15 @@ public class SiteSettingsController {
                 "unitpay",       ps.isUnitpayEnabled(),
                 "stripe",        ps.isStripeEnabled(),
                 "yookassa",      ps.isYookassaEnabled(),
-                "trademc",       ps.isTrademcEnabled(),
+                "trademc",       trademcModuleEnabled && ps.isTrademcEnabled(),
                 "topUpProvider", ps.getTopUpProvider() != null ? ps.getTopUpProvider() : ""
+        ));
+    }
+
+    @GetMapping("/api/settings/modules")
+    public ResponseEntity<Map<String, Boolean>> modules() {
+        return ResponseEntity.ok(Map.of(
+                "trademc", trademcModuleEnabled
         ));
     }
 }

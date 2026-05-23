@@ -216,9 +216,23 @@ cd /
 #  permissions, DB constraints. Each step here is safe to re-run.
 step "Миграции (директории, схема БД)"
 
-# 1. site-settings snapshots dir. SiteSettingsBackupService writes here every
-#    hour and before every admin save. Created on fresh installs by install.sh,
-#    but old prod boxes don't have it yet.
+# 1a. Ensure app.modules.trademc exists in application.yml (for existing installs
+#     that pre-date the module system). Default: true. Admins set to false to hide.
+APP_YML="$INSTALL_DIR/application.yml"
+if [[ -f "$APP_YML" ]]; then
+  if ! grep -q 'modules:' "$APP_YML" 2>/dev/null; then
+    # Insert modules block under app: section
+    sed -i '/^  upload:/i\  modules:\n    trademc: true' "$APP_YML" 2>>"$LOG_FILE" \
+      && ok "Добавлен блок app.modules в application.yml" \
+      || warn "Не удалось добавить app.modules — добавь вручную"
+  else
+    info "app.modules уже есть в application.yml"
+  fi
+fi
+
+# 1b. site-settings snapshots dir. SiteSettingsBackupService writes here every
+#     hour and before every admin save. Created on fresh installs by install.sh,
+#     but old prod boxes don't have it yet.
 if [[ ! -d "$INSTALL_DIR/backups/site-settings" ]]; then
   mkdir -p "$INSTALL_DIR/backups/site-settings"
   chown -R craftcms:craftcms "$INSTALL_DIR/backups"

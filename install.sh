@@ -839,6 +839,8 @@ app:
       - https://${SITE_DOMAIN}
   upload:
     path: ${INSTALL_DIR}/uploads
+  modules:
+    trademc: true
 
 bridge:
   template-jar: ${INSTALL_DIR}/BridgePlugin.jar
