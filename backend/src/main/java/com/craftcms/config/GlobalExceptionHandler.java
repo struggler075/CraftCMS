@@ -54,7 +54,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Map<String, String>> handleBadCredentials(BadCredentialsException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("message", "Неверный логин или пароль8"));
+                .body(Map.of("message", "Неверный логин или пароль"));
     }
 
     @ExceptionHandler({LockedException.class, DisabledException.class})
