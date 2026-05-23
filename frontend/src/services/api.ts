@@ -294,6 +294,8 @@ export const updatesApi = {
     api.put<{ message: string }>('/admin/updates/token', { token }).then((r) => r.data),
   getWsToken: () =>
     api.post<{ token: string }>('/admin/updates/ws-token').then((r) => r.data),
+  resetBaseline: () =>
+    api.post<{ message: string }>('/admin/updates/reset-baseline').then((r) => r.data),
 }
 
 export interface PaymentSettings {

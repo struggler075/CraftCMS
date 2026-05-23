@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCcw, ShieldCheck, ShieldX, KeyRound,
   ExternalLink, ChevronDown, ChevronUp, AlertTriangle, Loader2,
-  ArrowUpCircle, CheckCircle2, Clock, Terminal, X, WifiOff,
+  ArrowUpCircle, CheckCircle2, Clock, Terminal, X, WifiOff, BookmarkCheck,
 } from 'lucide-react'
 import { updatesApi, type UpdatesStatus, type Commit } from '../../services/api'
 import toast from 'react-hot-toast'
@@ -268,6 +268,7 @@ export default function AdminUpdates() {
   const [tokenInput, setTokenInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [applying, setApplying] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [showAllHistory, setShowAllHistory] = useState(false)
 
   const load = (bust = false) => {
@@ -298,6 +299,19 @@ export default function AdminUpdates() {
 
   const handleApply = () => setApplying(true)
 
+  const handleResetBaseline = async () => {
+    setResetting(true)
+    try {
+      const { message } = await updatesApi.resetBaseline()
+      toast.success(message)
+      load(true)
+    } catch {
+      toast.error('Не удалось сбросить baseline')
+    } finally {
+      setResetting(false)
+    }
+  }
+
   const isActive       = data?.status === 'active'
   const isInactive     = data?.status === 'inactive'
   const isUnconfigured = data?.status === 'unconfigured'
@@ -320,11 +334,24 @@ export default function AdminUpdates() {
             <h1 className="text-xl font-semibold text-c-text">Обновления</h1>
           </div>
           {!loading && (
-            <button onClick={() => load(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-c-t2 hover:text-c-text border border-c-border hover:border-c-border-h rounded-lg transition-colors cursor-pointer">
-              <RefreshCcw className="w-3.5 h-3.5" />
-              Обновить
-            </button>
+            <div className="flex items-center gap-2">
+              {isActive && (
+                <button
+                  onClick={handleResetBaseline}
+                  disabled={resetting}
+                  title="Отметить все текущие коммиты как установленные и скрыть их из обновлений"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-c-t2 hover:text-c-text border border-c-border hover:border-c-border-h rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {resetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookmarkCheck className="w-3.5 h-3.5" />}
+                  Сбросить baseline
+                </button>
+              )}
+              <button onClick={() => load(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-c-t2 hover:text-c-text border border-c-border hover:border-c-border-h rounded-lg transition-colors cursor-pointer">
+                <RefreshCcw className="w-3.5 h-3.5" />
+                Обновить
+              </button>
+            </div>
           )}
         </div>
 

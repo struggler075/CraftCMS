@@ -115,6 +115,34 @@ public class AdminUpdatesController {
         }
     }
 
+    // ── POST /api/admin/updates/reset-baseline ────────────────────────────────
+
+    @PostMapping("/reset-baseline")
+    public ResponseEntity<Map<String, String>> resetBaseline() {
+        SiteSettings settings = siteSettingsService.get();
+        String token = settings.getGithubToken();
+        if (token == null || token.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Токен не настроен"));
+        }
+        HttpEntity<Void> req = new HttpEntity<>(githubHeaders(token));
+        List<CommitDto> commits = fetchCommits(req);
+        if (commits.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Не удалось получить список коммитов"));
+        }
+        String latestSha = commits.get(0).sha();
+        try {
+            Path p = Paths.get(installDir, "version.txt");
+            Files.writeString(p, latestSha);
+            cache = null;
+            log.info("Baseline reset to {} by {}", latestSha.substring(0, 7), actorName());
+            return ResponseEntity.ok(Map.of("message", "Базовая версия сброшена до " + latestSha.substring(0, 7)));
+        } catch (Exception e) {
+            log.error("Cannot write version.txt: {}", e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("message", "Ошибка записи version.txt: " + e.getMessage()));
+        }
+    }
+
     // ── PUT /api/admin/updates/token ──────────────────────────────────────────
 
     @PutMapping("/token")

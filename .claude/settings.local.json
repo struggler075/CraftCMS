@@ -22,7 +22,9 @@
       "Bash(unzip -p \"serv/libraries/net/minecraftforge/forge/1.7.10-10.13.4.1614-1.7.10/1-lwjgl3ify-3.0.13-forgePatches.jar\" META-INF/MANIFEST.MF)",
       "Bash(Select-Object FullName)",
       "Read(//mnt/c/Users/admin/Desktop/**)",
-      "Bash(dir \"C:\\\\Users\\\\admin\\\\Desktop\\\\CMSMinecraft\")"
+      "Bash(dir \"C:\\\\Users\\\\admin\\\\Desktop\\\\CMSMinecraft\")",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(xargs grep -l \"api/admin/updates\")"
     ]
   }
 }
