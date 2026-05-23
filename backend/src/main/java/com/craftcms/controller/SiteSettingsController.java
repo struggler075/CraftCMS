@@ -36,6 +36,7 @@ public class SiteSettingsController {
                 "unitpay",       ps.isUnitpayEnabled(),
                 "stripe",        ps.isStripeEnabled(),
                 "yookassa",      ps.isYookassaEnabled(),
+                "trademc",       ps.isTrademcEnabled(),
                 "topUpProvider", ps.getTopUpProvider() != null ? ps.getTopUpProvider() : ""
         ));
     }

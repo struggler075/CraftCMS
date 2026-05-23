@@ -71,6 +71,12 @@ public class PaymentService {
         if (incoming.getYookassaSecretKey() != null && !incoming.getYookassaSecretKey().isBlank())
             s.setYookassaSecretKey(incoming.getYookassaSecretKey());
 
+        s.setTrademcEnabled(incoming.isTrademcEnabled());
+        if (incoming.getTrademcShopId() != null) s.setTrademcShopId(incoming.getTrademcShopId());
+        if (incoming.getTrademcItemId() != null) s.setTrademcItemId(incoming.getTrademcItemId());
+        if (incoming.getTrademcShopKey() != null && !incoming.getTrademcShopKey().isBlank())
+            s.setTrademcShopKey(incoming.getTrademcShopKey());
+
         s.setShowLogosInFooter(incoming.isShowLogosInFooter());
         if (incoming.getTopUpProvider() != null) s.setTopUpProvider(incoming.getTopUpProvider());
         return settingsRepository.save(s);
@@ -103,6 +109,7 @@ public class PaymentService {
             case UNITPAY   -> buildUnitpayUrl(settings, orderId, amount);
             case STRIPE    -> createStripeSession(settings, orderId, amount, siteUrl);
             case YOOKASSA  -> createYookassaPayment(settings, orderId, amount, siteUrl);
+            case TRADEMC   -> createTradeMcPayment(settings, orderId, amount, user.getUsername(), siteUrl);
         };
     }
 
@@ -289,6 +296,170 @@ public class PaymentService {
                 if (orderId != null) completeOrder(orderId);
             }
         }
+    }
+
+    // ── TradeMC ─────────────────────────────────────────────────────────────
+
+    private String createTradeMcPayment(PaymentSettings s, String orderId, BigDecimal amount,
+                                        String username, String siteUrl) {
+        String shopId = s.getTrademcShopId();
+        String itemId = s.getTrademcItemId();
+        try {
+            String url = "https://api.trademc.org/shop.buyItems"
+                    + "?shop=" + enc(shopId)
+                    + "&v=3"
+                    + "&items=" + enc(itemId) + ":1"
+                    + "&buyer=" + enc(username)
+                    + "&user_fields[" + enc(itemId) + "][amount]=" + amount.toPlainString();
+
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .GET()
+                    .timeout(java.time.Duration.ofSeconds(15))
+                    .build();
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            String body = resp.body();
+
+            String cartId = extractJson(body, "cart_id");
+            if (cartId == null) {
+                String errMsg = extractJson(body, "message");
+                throw new RuntimeException("TradeMC error: " + (errMsg != null ? errMsg : body));
+            }
+
+            // Store cart_id as externalId for future reference
+            orderRepository.findById(orderId).ifPresent(order -> {
+                order.setExternalId(cartId);
+                orderRepository.save(order);
+            });
+
+            String successUrl = enc(siteUrl + "/payment/success?orderId=" + orderId);
+            String failUrl    = enc(siteUrl + "/payment/cancel");
+
+            return "https://pay.trademc.org?cart_id=" + cartId
+                    + "&success_url=" + successUrl
+                    + "&fail_url=" + failUrl;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("TradeMC request interrupted", e);
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Ошибка создания TradeMC платежа: " + e.getMessage(), e);
+        }
+    }
+
+    @Transactional
+    public String handleTradeMcWebhook(String rawBody) {
+        PaymentSettings s = getSettings();
+        if (!s.isTrademcEnabled()) {
+            log.warn("TradeMC webhook received but provider is disabled");
+            return "disabled";
+        }
+
+        // Parse JSON — we need the raw body for hash verification
+        String receivedHash = extractJson(rawBody, "hash");
+        if (receivedHash == null) {
+            log.warn("TradeMC webhook: no hash field");
+            return "no hash";
+        }
+
+        // Rebuild JSON without "hash" field and verify signature.
+        // TradeMC computes: SHA256(json_without_hash + shop_key)
+        // where json_without_hash follows PHP's json_encode (escapes /).
+        String jsonWithoutHash = removeTradeMcHashField(rawBody);
+        String expected = sha256Hex(jsonWithoutHash + s.getTrademcShopKey());
+
+        if (!MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                receivedHash.getBytes(StandardCharsets.UTF_8))) {
+            log.warn("TradeMC webhook: invalid hash");
+            return "bad hash";
+        }
+
+        String shopId = extractJson(rawBody, "shop_id");
+        if (!s.getTrademcShopId().equals(shopId)) {
+            log.warn("TradeMC webhook: shop_id mismatch (expected={}, got={})", s.getTrademcShopId(), shopId);
+            return "shop mismatch";
+        }
+
+        String buyer = extractJson(rawBody, "buyer");
+        if (buyer == null || buyer.isBlank()) {
+            log.warn("TradeMC webhook: empty buyer");
+            return "no buyer";
+        }
+
+        // Credit the balance. Find the most recent pending TradeMC order for this buyer.
+        User user = userRepository.findByUsername(buyer).orElse(null);
+        if (user == null) {
+            log.warn("TradeMC webhook: user '{}' not found", buyer);
+            return "user not found";
+        }
+
+        // Sum up cost from items — this is what the user actually paid
+        BigDecimal totalCost = extractTradeMcTotalCost(rawBody);
+
+        // Find the pending order for this user (match by provider + status + user)
+        TopUpOrder order = orderRepository
+                .findFirstByUserIdAndProviderAndStatusOrderByCreatedAtDesc(
+                        user.getId(), PaymentProvider.TRADEMC, TopUpStatus.PENDING)
+                .orElse(null);
+
+        if (order != null) {
+            completeOrder(order.getId());
+            log.info("TradeMC: completed order {} for user {} (+{} ₽)", order.getId(), buyer, order.getAmount());
+        } else {
+            // No pending order found — credit directly based on paid amount.
+            // This handles edge cases where the order was lost or the user
+            // paid outside the normal flow.
+            if (totalCost.compareTo(BigDecimal.ZERO) > 0) {
+                user.setBalance(user.getBalance().add(totalCost));
+                userRepository.save(user);
+                log.info("TradeMC: direct credit for user {} (+{} ₽, no pending order)", buyer, totalCost);
+            }
+        }
+
+        return "ok";
+    }
+
+    /**
+     * Remove the "hash" key-value pair from the JSON payload for signature
+     * verification. TradeMC expects the exact JSON structure minus the hash
+     * field — including PHP-style escaped forward slashes.
+     */
+    private String removeTradeMcHashField(String json) {
+        // Remove ,"hash":"..." or "hash":"...", from the JSON string.
+        // This is robust for the TradeMC payload format.
+        String cleaned = json
+                .replaceAll(",\\s*\"hash\"\\s*:\\s*\"[^\"]*\"", "")
+                .replaceAll("\"hash\"\\s*:\\s*\"[^\"]*\"\\s*,?", "");
+        // Ensure no trailing comma before closing brace
+        cleaned = cleaned.replaceAll(",\\s*}", "}");
+        // PHP's json_encode escapes forward slashes
+        cleaned = cleaned.replace("/", "\\/");
+        return cleaned;
+    }
+
+    /** Extract the total cost from items[].cost fields in the webhook payload. */
+    private BigDecimal extractTradeMcTotalCost(String json) {
+        BigDecimal total = BigDecimal.ZERO;
+        int idx = 0;
+        while (true) {
+            idx = json.indexOf("\"cost\"", idx);
+            if (idx < 0) break;
+            int colon = json.indexOf(':', idx + 6);
+            if (colon < 0) break;
+            int start = colon + 1;
+            while (start < json.length() && Character.isWhitespace(json.charAt(start))) start++;
+            int end = start;
+            while (end < json.length() && "0123456789.".indexOf(json.charAt(end)) >= 0) end++;
+            if (end > start) {
+                try { total = total.add(new BigDecimal(json.substring(start, end))); }
+                catch (NumberFormatException ignored) {}
+            }
+            idx = end;
+        }
+        return total;
     }
 
     // ── Complete order ────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ interface PaymentLogosState {
   unitpay: boolean
   stripe: boolean
   yookassa: boolean
+  trademc: boolean
 }
 
 export default function Footer() {
@@ -26,7 +27,7 @@ export default function Footer() {
   if (!loaded) return null
 
   const columns = parseFooterColumns(footerColumnsJson)
-  const showLogos = logos?.show && (logos.freekassa || logos.unitpay || logos.stripe || logos.yookassa)
+  const showLogos = logos?.show && (logos.freekassa || logos.unitpay || logos.stripe || logos.yookassa || logos.trademc)
 
   return (
     <footer className="border-t border-c-border mt-20">
@@ -94,6 +95,11 @@ export default function Footer() {
             {logos!.yookassa && (
               <span className="px-2.5 py-1 bg-c-bg2 border border-c-border rounded-md text-[11px] font-semibold text-yellow-400 tracking-wide">
                 ЮKassa
+              </span>
+            )}
+            {logos!.trademc && (
+              <span className="px-2.5 py-1 bg-c-bg2 border border-c-border rounded-md text-[11px] font-semibold text-emerald-400 tracking-wide">
+                TradeMC
               </span>
             )}
           </div>

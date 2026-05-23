@@ -237,13 +237,13 @@ fi
 #    dropped. The Java enum already validates writes — the DB-level check
 #    is duplicate and a footgun, so we remove it.
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; then
-  if docker exec -i craftcms-postgres psql -U craftcms craftcms \
-    -c "ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_check;" \
-    >>"$LOG_FILE" 2>&1; then
-    ok "Сброшен устаревший CHECK на audit_logs.action (если был)"
-  else
-    warn "Не удалось сбросить CHECK audit_logs_action_check — смотри лог"
-  fi
+  docker exec -i craftcms-postgres psql -U craftcms craftcms -c "
+    ALTER TABLE audit_logs   DROP CONSTRAINT IF EXISTS audit_logs_action_check;
+    ALTER TABLE topup_orders DROP CONSTRAINT IF EXISTS topup_orders_provider_check;
+    ALTER TABLE topup_orders DROP CONSTRAINT IF EXISTS topup_orders_status_check;
+  " >>"$LOG_FILE" 2>&1 \
+    && ok "Сброшены устаревшие enum-CHECK constraints (если были)" \
+    || warn "Не удалось сбросить CHECK constraints — смотри лог"
 fi
 
 # 3. site_settings CHECK(id = 1). Hibernate's `ddl-auto: update` does NOT

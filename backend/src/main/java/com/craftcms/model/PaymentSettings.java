@@ -38,6 +38,12 @@ public class PaymentSettings {
     @Builder.Default private String yookassaShopId = "";
     @Builder.Default private String yookassaSecretKey = "";
 
+    // TradeMC
+    @Builder.Default private boolean trademcEnabled = false;
+    @Builder.Default private String trademcShopId = "";
+    @Builder.Default private String trademcItemId = "";
+    @Builder.Default private String trademcShopKey = "";
+
     @Builder.Default private boolean showLogosInFooter = true;
 
     // Which provider is used for balance top-ups (empty = none configured)

@@ -281,11 +281,15 @@ export interface PaymentSettings {
   yookassaEnabled: boolean
   yookassaShopId: string
   yookassaSecretKey: string
+  trademcEnabled: boolean
+  trademcShopId: string
+  trademcItemId: string
+  trademcShopKey: string
   showLogosInFooter: boolean
   topUpProvider: string
 }
 
-export type PaymentProvider = 'FREEKASSA' | 'UNITPAY' | 'STRIPE' | 'YOOKASSA'
+export type PaymentProvider = 'FREEKASSA' | 'UNITPAY' | 'STRIPE' | 'YOOKASSA' | 'TRADEMC'
 export type TopUpStatus = 'PENDING' | 'COMPLETED' | 'FAILED'
 
 export interface TopUpOrder {

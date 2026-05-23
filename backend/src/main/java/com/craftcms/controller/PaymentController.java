@@ -95,4 +95,12 @@ public class PaymentController {
         paymentService.handleYookassaWebhook(payload);
         return ResponseEntity.ok("ok");
     }
+
+    // ── TradeMC webhook ─────────────────────────────────────────────────────
+
+    @PostMapping("/webhook/trademc")
+    public ResponseEntity<String> tradeMcWebhook(@RequestBody String payload) {
+        String result = paymentService.handleTradeMcWebhook(payload);
+        return ResponseEntity.ok(result);
+    }
 }
