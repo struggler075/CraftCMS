@@ -42,8 +42,19 @@ public class PaymentService {
     // ── Settings ─────────────────────────────────────────────────────────────
 
     public PaymentSettings getSettings() {
-        return settingsRepository.findById(1L)
+        PaymentSettings ps = settingsRepository.findById(1L)
                 .orElseGet(() -> settingsRepository.save(PaymentSettings.builder().build()));
+
+        // Derive enabled flags from topUpProvider on read — belt-and-suspenders
+        // in case the DB has stale boolean flags from an old save.
+        String p = ps.getTopUpProvider() != null ? ps.getTopUpProvider() : "";
+        ps.setFreekassaEnabled("FREEKASSA".equals(p));
+        ps.setUnitpayEnabled("UNITPAY".equals(p));
+        ps.setStripeEnabled("STRIPE".equals(p));
+        ps.setYookassaEnabled("YOOKASSA".equals(p));
+        ps.setTrademcEnabled("TRADEMC".equals(p));
+
+        return ps;
     }
 
     @Transactional
@@ -89,7 +100,11 @@ public class PaymentService {
             s.setTrademcShopKey(incoming.getTrademcShopKey());
 
         s.setShowLogosInFooter(incoming.isShowLogosInFooter());
-        return settingsRepository.save(s);
+
+        log.info("PaymentSettings saving: topUpProvider={}, trademcEnabled={}, shopId={}, itemId={}",
+                s.getTopUpProvider(), s.isTrademcEnabled(), s.getTrademcShopId(), s.getTrademcItemId());
+
+        return settingsRepository.saveAndFlush(s);
     }
 
     // ── Create top-up ────────────────────────────────────────────────────────
