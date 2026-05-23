@@ -292,8 +292,8 @@ export const updatesApi = {
     api.get<UpdatesStatus>(`/admin/updates${refresh ? '?refresh=true' : ''}`).then((r) => r.data),
   updateToken: (token: string) =>
     api.put<{ message: string }>('/admin/updates/token', { token }).then((r) => r.data),
-  apply: () =>
-    api.post<{ message: string }>('/admin/updates/apply').then((r) => r.data),
+  getWsToken: () =>
+    api.post<{ token: string }>('/admin/updates/ws-token').then((r) => r.data),
 }
 
 export interface PaymentSettings {

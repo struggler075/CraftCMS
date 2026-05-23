@@ -51,6 +51,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/logout-all").authenticated()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/bridge/**").permitAll()
+                .requestMatchers("/api/internal/**").permitAll()
                 .requestMatchers("/api/payments/webhook/**").permitAll()
                 .requestMatchers("/api/payments/**").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/settings").permitAll()

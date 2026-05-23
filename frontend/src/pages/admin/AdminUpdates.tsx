@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  RefreshCcw, ShieldCheck, ShieldX, KeyRound, GitCommit,
+  RefreshCcw, ShieldCheck, ShieldX, KeyRound,
   ExternalLink, ChevronDown, ChevronUp, AlertTriangle, Loader2,
-  ArrowUpCircle, CheckCircle2, Clock,
+  ArrowUpCircle, CheckCircle2, Clock, Terminal, X, WifiOff,
 } from 'lucide-react'
-import axios from 'axios'
 import { updatesApi, type UpdatesStatus, type Commit } from '../../services/api'
 import toast from 'react-hot-toast'
 
@@ -87,52 +86,173 @@ function CommitRow({ commit, isLast, dim }: { commit: Commit; isLast: boolean; d
 
 // ── ApplyOverlay ──────────────────────────────────────────────────────────────
 
-function ApplyOverlay({ onDone }: { onDone: () => void }) {
-  const [phase, setPhase] = useState<'running' | 'down' | 'waiting'>('running')
-  const wasDown = useRef(false)
+type ApplyPhase = 'connecting' | 'running' | 'success' | 'failed' | 'error'
+
+function lineClass(line: string): string {
+  const t = line.trimStart()
+  if (t.startsWith('✓') || t.startsWith('OK ')) return 'text-emerald-400'
+  if (t.startsWith('✗') || t.startsWith('ОШИБКА') || t.startsWith('ERR')) return 'text-red-400'
+  if (t.startsWith('!') || t.startsWith('WARN')) return 'text-yellow-400'
+  if (t.startsWith('━')) return 'text-slate-400 font-semibold'
+  if (t.startsWith('→')) return 'text-sky-400'
+  return 'text-slate-300'
+}
+
+function ApplyOverlay({ onClose }: { onClose: () => void }) {
+  const [phase, setPhase]   = useState<ApplyPhase>('connecting')
+  const [lines, setLines]   = useState<string[]>([])
+  const [exitCode, setExitCode] = useState<number | null>(null)
+  const [errMsg, setErrMsg] = useState('')
+  const [countdown, setCountdown] = useState(3)
+  const termRef    = useRef<HTMLDivElement>(null)
+  const wsRef      = useRef<WebSocket | null>(null)
+  const phaseRef   = useRef<ApplyPhase>('connecting')
+
+  const setPhaseSync = (p: ApplyPhase) => { phaseRef.current = p; setPhase(p) }
+
+  const addLine = (line: string) =>
+    setLines(prev => prev.length >= 2000 ? [...prev.slice(-1999), line] : [...prev, line])
+
+  // Auto-scroll terminal to bottom on new output
+  useEffect(() => {
+    const el = termRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [lines])
+
+  // Countdown + auto-close after success
+  useEffect(() => {
+    if (phase !== 'success') return
+    if (countdown <= 0) { onClose(); return }
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [phase, countdown, onClose])
 
   useEffect(() => {
-    const iv = setInterval(async () => {
+    let ws: WebSocket | null = null
+
+    ;(async () => {
       try {
-        await axios.get('/api/health', { timeout: 2000 })
-        if (wasDown.current) {
-          clearInterval(iv)
-          onDone()
+        const { token } = await updatesApi.getWsToken()
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+        ws = new WebSocket(`${proto}//${location.host}/updater/ws`)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          ws!.send(JSON.stringify({ type: 'start', token }))
+          setPhaseSync('running')
+        }
+
+        ws.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data as string)
+            if (msg.type === 'log') {
+              addLine(msg.line as string)
+            } else if (msg.type === 'exit') {
+              setExitCode(msg.code as number)
+              setPhaseSync(msg.code === 0 ? 'success' : 'failed')
+            } else if (msg.type === 'error') {
+              setErrMsg(msg.message as string)
+              setPhaseSync('error')
+            }
+          } catch { /* ignore bad frames */ }
+        }
+
+        ws.onerror = () => {
+          setErrMsg('Ошибка WebSocket соединения с агентом обновлений')
+          setPhaseSync('error')
+        }
+
+        ws.onclose = () => {
+          if (phaseRef.current === 'running') {
+            setErrMsg('Соединение с агентом прервано')
+            setPhaseSync('error')
+          }
         }
       } catch {
-        if (!wasDown.current) {
-          wasDown.current = true
-          setPhase('down')
-        } else {
-          setPhase('waiting')
-        }
+        setErrMsg('Не удалось получить токен. Убедитесь что craftcms-updater запущен.')
+        setPhaseSync('error')
       }
-    }, 2500)
-    return () => clearInterval(iv)
-  }, [onDone])
+    })()
 
-  const lines: Record<typeof phase, string> = {
-    running: 'Обновление запущено, ожидаем остановки сервиса...',
-    down:    'Сервис перезапускается...',
-    waiting: 'Ждём запуска нового сервиса...',
+    return () => { ws?.close() }
+  }, [])
+
+  const statusBar = () => {
+    if (phase === 'connecting') return (
+      <div className="flex items-center gap-2 text-slate-400">
+        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+        <span>Подключение к агенту обновлений...</span>
+      </div>
+    )
+    if (phase === 'running') return (
+      <div className="flex items-center gap-2 text-sky-400">
+        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+        <span>Обновление выполняется...</span>
+      </div>
+    )
+    if (phase === 'success') return (
+      <div className="flex items-center gap-2 text-emerald-400">
+        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+        <span>Обновление успешно — перезагрузка через {countdown}с</span>
+      </div>
+    )
+    if (phase === 'failed') return (
+      <div className="flex items-center gap-2 text-red-400">
+        <X className="w-3.5 h-3.5 shrink-0" />
+        <span>Обновление завершилось с ошибкой (exit {exitCode})</span>
+      </div>
+    )
+    return (
+      <div className="flex items-center gap-2 text-red-400">
+        <WifiOff className="w-3.5 h-3.5 shrink-0" />
+        <span>{errMsg}</span>
+      </div>
+    )
   }
 
+  const canClose = phase === 'failed' || phase === 'error'
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="card rounded-2xl p-8 max-w-sm w-full mx-4 text-center border border-c-border"
+        className="w-full max-w-3xl rounded-xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col"
+        style={{ maxHeight: '80vh' }}
       >
-        <div className="w-12 h-12 rounded-full bg-c-primary/10 border border-c-primary/20 flex items-center justify-center mx-auto mb-4">
-          <Loader2 className="w-6 h-6 text-c-primary animate-spin" />
+        {/* Title bar */}
+        <div className="flex items-center gap-2.5 px-4 py-2.5 bg-slate-800 border-b border-slate-700 shrink-0">
+          <Terminal className="w-4 h-4 text-slate-400" />
+          <span className="text-sm text-slate-300 font-medium">Применение обновления</span>
+          <div className="ml-auto flex items-center gap-2">
+            {canClose && (
+              <button onClick={onClose}
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors cursor-pointer px-2 py-1 rounded hover:bg-slate-700">
+                <X className="w-3.5 h-3.5" /> Закрыть
+              </button>
+            )}
+          </div>
         </div>
-        <p className="text-sm font-medium text-c-text mb-1">Применение обновления</p>
-        <p className="text-xs text-c-t3">{lines[phase]}</p>
-        <div className="flex justify-center gap-1.5 mt-4">
-          {(['running', 'down', 'waiting'] as const).map((p) => (
-            <div key={p} className={`w-1.5 h-1.5 rounded-full transition-colors ${phase === p ? 'bg-c-primary' : 'bg-c-border'}`} />
+
+        {/* Terminal output */}
+        <div
+          ref={termRef}
+          className="flex-1 overflow-y-auto bg-slate-950 px-4 py-3 font-mono text-xs leading-5"
+          style={{ minHeight: '300px' }}
+        >
+          {lines.length === 0 && phase === 'connecting' && (
+            <span className="text-slate-600">Ожидание вывода...</span>
+          )}
+          {lines.map((line, i) => (
+            <div key={i} className={`whitespace-pre-wrap break-all ${lineClass(line)}`}>
+              {line || ' '}
+            </div>
           ))}
+        </div>
+
+        {/* Status bar */}
+        <div className="px-4 py-2.5 bg-slate-900 border-t border-slate-700 text-xs shrink-0">
+          {statusBar()}
         </div>
       </motion.div>
     </div>
@@ -176,12 +296,7 @@ export default function AdminUpdates() {
     finally { setSaving(false) }
   }
 
-  const handleApply = async () => {
-    try {
-      await updatesApi.apply()
-      setApplying(true)
-    } catch { toast.error('Не удалось запустить обновление') }
-  }
+  const handleApply = () => setApplying(true)
 
   const isActive       = data?.status === 'active'
   const isInactive     = data?.status === 'inactive'
@@ -193,7 +308,9 @@ export default function AdminUpdates() {
 
   return (
     <>
-      {applying && <ApplyOverlay onDone={() => window.location.reload()} />}
+      {applying && (
+        <ApplyOverlay onClose={() => { setApplying(false); window.location.reload() }} />
+      )}
 
       <div className="max-w-2xl">
         {/* Header */}

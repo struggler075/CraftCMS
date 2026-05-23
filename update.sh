@@ -116,10 +116,18 @@ JAVA_HOME_PATH=$(dirname "$(dirname "$(readlink -f "$(which java)")")")
 log_file "JAVA_HOME=${JAVA_HOME_PATH}"
 
 # ── Token ─────────────────────────────────────────────────────────────────────
-echo -ne "  ${BOLD}Токен GitHub:${NC}  "
-read -rs GITHUB_TOKEN; echo ""
-GITHUB_TOKEN="${GITHUB_TOKEN//[[:space:]]/}"
-[[ -z "$GITHUB_TOKEN" ]] && err "Токен не может быть пустым"
+# When invoked from the Elixir updater agent (non-TTY), the token is passed via
+# GITHUB_TOKEN_ENV to avoid interactive stdin reads that block headlessly.
+if [[ -n "${GITHUB_TOKEN_ENV:-}" ]]; then
+  GITHUB_TOKEN="$GITHUB_TOKEN_ENV"
+  unset GITHUB_TOKEN_ENV
+  ok "Токен получен из среды"
+else
+  echo -ne "  ${BOLD}Токен GitHub:${NC}  "
+  read -rs GITHUB_TOKEN; echo ""
+  GITHUB_TOKEN="${GITHUB_TOKEN//[[:space:]]/}"
+  [[ -z "$GITHUB_TOKEN" ]] && err "Токен не может быть пустым"
+fi
 
 # Verify token
 HTTP=$(curl -fsS --max-time 20 -o /dev/null -w '%{http_code}' \
@@ -431,6 +439,14 @@ SERVICE_WAS_STOPPED=0   # restart handled, EXIT trap won't double-start
 
 # Record the deployed commit so the admin Updates page can detect newer commits.
 git -C "$SRC_DIR" rev-parse HEAD > "$INSTALL_DIR/version.txt" 2>/dev/null || true
+
+# Ensure nginx has the /updater/ WebSocket proxy block (idempotent, for existing installs).
+NGINX_SITE="/etc/nginx/sites-available/craftcms"
+if [[ -f "$NGINX_SITE" ]] && ! grep -q 'location /updater/' "$NGINX_SITE"; then
+  sed -i 's|location /api/ {|location /updater/ {\n        proxy_pass http://127.0.0.1:8081/;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_read_timeout 600s;\n    }\n\n    location /api/ {|' "$NGINX_SITE" 2>>"$LOG_FILE" \
+    && ok "Nginx: добавлен блок /updater/ (агент обновлений)" \
+    || warn "Не удалось добавить /updater/ в nginx — добавь вручную"
+fi
 
 systemctl reload nginx 2>>"$LOG_FILE" || true
 

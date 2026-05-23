@@ -4,6 +4,7 @@ import com.craftcms.dto.CommitDto;
 import com.craftcms.dto.UpdatesStatusDto;
 import com.craftcms.model.SiteSettings;
 import com.craftcms.service.SiteSettingsService;
+import com.craftcms.service.WsTokenService;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +16,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -35,6 +35,7 @@ import java.util.regex.Pattern;
 public class AdminUpdatesController {
 
     private final SiteSettingsService siteSettingsService;
+    private final WsTokenService wsTokenService;
     private final RestTemplate restTemplate;
 
     @Value("${app.github.repo:struggler075/CraftCMS}")
@@ -123,24 +124,18 @@ public class AdminUpdatesController {
         return ResponseEntity.ok(Map.of("message", "Лицензионный токен обновлён"));
     }
 
-    // ── POST /api/admin/updates/apply ─────────────────────────────────────────
+    // ── POST /api/admin/updates/ws-token ─────────────────────────────────────
 
-    @PostMapping("/apply")
-    public ResponseEntity<Map<String, String>> applyUpdate() {
-        String script = installDir + "/update.sh";
-        log.info("Update triggered by {}", actorName());
-        try {
-            // setsid creates a new session so the child outlives the parent JVM
-            // when systemctl stop craftcms kills this process.
-            new ProcessBuilder("bash", "-c",
-                    "nohup setsid bash " + script + " > /var/log/craftcms-update.log 2>&1 < /dev/null &")
-                    .start();
-            cache = null;
-            return ResponseEntity.accepted().body(Map.of("message", "Обновление запущено"));
-        } catch (IOException e) {
-            log.error("Failed to start update script: {}", e.getMessage());
-            return ResponseEntity.status(500).body(Map.of("message", "Не удалось запустить: " + e.getMessage()));
+    @PostMapping("/ws-token")
+    public ResponseEntity<Map<String, String>> getWsToken() {
+        SiteSettings settings = siteSettingsService.get();
+        String githubToken = settings.getGithubToken();
+        if (githubToken == null || githubToken.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "GitHub token not configured"));
         }
+        String wsToken = wsTokenService.create(githubToken);
+        log.info("WS update token issued for {}", actorName());
+        return ResponseEntity.ok(Map.of("token", wsToken));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
