@@ -265,6 +265,31 @@ export const smtpApi = {
   test: (email: string) => api.post<{ message: string }>('/admin/smtp/test', { email }).then((r) => r.data),
 }
 
+export interface Commit {
+  sha: string
+  shortSha: string
+  message: string
+  author: string
+  authorAvatarUrl: string
+  date: string
+  url: string
+  type: string
+}
+
+export interface UpdatesStatus {
+  status: 'active' | 'inactive' | 'unconfigured'
+  message: string
+  tokenSet: boolean
+  githubRepo: string | null
+  commits: Commit[]
+}
+
+export const updatesApi = {
+  getStatus: () => api.get<UpdatesStatus>('/admin/updates').then((r) => r.data),
+  updateToken: (token: string) =>
+    api.put<{ message: string }>('/admin/updates/token', { token }).then((r) => r.data),
+}
+
 export interface PaymentSettings {
   id?: number
   freekassaEnabled: boolean

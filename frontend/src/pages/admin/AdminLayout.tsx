@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useSiteSettings } from '../../store/siteSettingsStore'
 import {
   LayoutDashboard, Package, Server, Newspaper,
-  Tag, LogOut, ArrowLeft, ShieldCheck, Download, Settings, Gem, Users, Menu, X, Plug, CreditCard, Activity
+  Tag, LogOut, ArrowLeft, ShieldCheck, Download, Settings, Gem, Users, Menu, X, Plug, CreditCard, Activity, RefreshCcw
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useEffect, useState } from 'react'
@@ -22,6 +22,7 @@ const navItems = [
   { label: 'Логи', href: '/admin/logs', icon: Activity },
   { label: 'Настройки', href: '/admin/settings', icon: Settings },
   { label: 'Серверный Плагин', href: '/admin/bridge', icon: Plug },
+  { label: 'Обновления', href: '/admin/updates', icon: RefreshCcw },
 ]
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {

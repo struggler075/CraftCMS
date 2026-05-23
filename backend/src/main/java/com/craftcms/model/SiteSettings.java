@@ -1,6 +1,7 @@
 package com.craftcms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -88,6 +89,14 @@ public class SiteSettings {
               {"title":"Навигация","links":[{"label":"Главная","href":"/"},{"label":"Магазин","href":"/shop"},{"label":"Лаунчер","href":"/launcher"}]},
               {"title":"Поддержка","links":[{"label":"Discord","href":"#"},{"label":"VK","href":"#"},{"label":"Правила","href":"#"},{"label":"Контакты","href":"#"}]}
             ]""";
+
+    // ── License / GitHub integration ─────────────────────────────────────────
+    // Exposed only through /api/admin/updates — never returned in the public
+    // /api/settings response. @JsonIgnore suppresses both serialization and
+    // deserialization so the general settings PUT cannot overwrite this field.
+    @JsonIgnore
+    @Column(name = "github_token", columnDefinition = "TEXT")
+    private String githubToken;
 
     /**
      * Optimistic-lock token. Two admins editing the settings simultaneously will

@@ -270,6 +270,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS hwidid      bigint;
 
 -- products: soft-delete
 ALTER TABLE products ADD COLUMN IF NOT EXISTS deleted boolean DEFAULT false NOT NULL;
+
+-- site_settings: GitHub license token
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS github_token text;
 SCHEMA
   ok "Схема БД синхронизирована"
 fi

@@ -99,6 +99,16 @@ public class SiteSettingsService {
         return saved;
     }
 
+    /** Update the GitHub license token — bypasses audit diff (sensitive value). */
+    @Transactional
+    public void updateGithubToken(String token) {
+        if (token == null || token.isBlank()) return;
+        SiteSettings s = get();
+        s.setGithubToken(token);
+        repository.save(s);
+        log.info("GitHub license token updated by {}", currentActorName());
+    }
+
     /** Replace the singleton row with a previously saved snapshot — used by manual restore. */
     @Transactional
     public SiteSettings restoreFrom(SiteSettings snapshot) {

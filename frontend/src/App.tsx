@@ -27,6 +27,7 @@ import AdminUsers from './pages/admin/AdminUsers'
 import AdminBridgePlugin from './pages/admin/AdminBridgePlugin'
 import AdminPayments from './pages/admin/AdminPayments'
 import AdminAuditLogs from './pages/admin/AdminAuditLogs'
+import AdminUpdates from './pages/admin/AdminUpdates'
 import PaymentSuccessPage from './pages/PaymentSuccessPage'
 import PaymentCancelPage from './pages/PaymentCancelPage'
 import DonatePage from './pages/DonatePage'
@@ -175,6 +176,7 @@ export default function App() {
           <Route path="bridge" element={<AdminBridgePlugin />} />
           <Route path="payments" element={<AdminPayments />} />
           <Route path="logs" element={<AdminAuditLogs />} />
+          <Route path="updates" element={<AdminUpdates />} />
         </Route>
         <Route path="*" element={<NotAuthorizedPage />} />
       </Routes>

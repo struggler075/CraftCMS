@@ -39,6 +39,9 @@ app:
   modules:
     trademc: true
 
+  github:
+    repo: struggler075/CraftCMS
+
 feign:
   client:
     config:
