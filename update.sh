@@ -570,17 +570,29 @@ UPDATER_SVC
       # ── swap release binary ──────────────────────────────────────────────
       if systemctl is-active --quiet craftcms-updater 2>/dev/null; then
         # Running inside the updater — can't stop ourselves.
-        # Stage new release; deferred background job swaps after we exit.
+        # IMPORTANT: nohup/disown still lives in the same systemd cgroup as the
+        # service. When "systemctl stop craftcms-updater" runs, systemd sends
+        # SIGTERM to the *entire* cgroup including our swap script — it kills
+        # itself before the mv/start can happen.
+        # Fix: use systemd-run to launch the swap in its own transient cgroup
+        # so stopping craftcms-updater doesn't affect it.
         cp -r "_build/prod/rel/updater" /opt/craftcms-updater-new
-        nohup bash -c '
-          sleep 20
-          systemctl stop  craftcms-updater 2>/dev/null || true
-          rm -rf /opt/craftcms-updater
-          mv /opt/craftcms-updater-new /opt/craftcms-updater
-          systemctl start craftcms-updater
-        ' >>/var/log/craftcms-updater-swap.log 2>&1 </dev/null &
-        disown
-        ok "Агент обновлений: новая версия применится через ~20 с"
+        cat > /tmp/_cms_updater_swap.sh << 'SWAP_SCRIPT'
+#!/bin/bash
+sleep 20
+systemctl stop  craftcms-updater 2>/dev/null || true
+sleep 1
+rm -rf /opt/craftcms-updater
+mv /opt/craftcms-updater-new /opt/craftcms-updater
+systemctl start craftcms-updater
+SWAP_SCRIPT
+        chmod +x /tmp/_cms_updater_swap.sh
+        systemd-run --no-block --collect \
+          --description="CraftCMS updater binary swap" \
+          /tmp/_cms_updater_swap.sh \
+          >>"$LOG_FILE" 2>&1 \
+          && ok "Агент обновлений: новая версия применится через ~20 с" \
+          || warn "systemd-run не удался — агент не будет обновлён"
       else
         # Stopped or first install — swap and start immediately.
         rm -rf /opt/craftcms-updater
