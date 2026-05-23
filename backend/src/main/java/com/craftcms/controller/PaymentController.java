@@ -99,27 +99,50 @@ public class PaymentController {
     }
 
     // ── TradeMC webhook ─────────────────────────────────────────────────────
+    // TradeMC sends Content-Type: application/x-www-form-urlencoded but the
+    // body is actually JSON. Spring's FormHttpMessageConverter consumes the
+    // InputStream to parse form params, leaving @RequestBody empty. So we
+    // read the raw InputStream ourselves BEFORE Spring touches it by using
+    // HttpServletRequest directly (no @RequestBody).
 
-    @PostMapping(value = "/webhook/trademc", consumes = {"application/json", "application/x-www-form-urlencoded", "text/plain", "*/*"})
-    public ResponseEntity<String> tradeMcWebhook(
-            @RequestBody String payload,
-            @RequestHeader(value = "Content-Type", required = false) String contentType) {
-        log.info("TradeMC webhook received: Content-Type={}, bodyLength={}", contentType, payload.length());
-        log.debug("TradeMC webhook body: {}", payload);
+    @PostMapping(value = "/webhook/trademc")
+    public ResponseEntity<String> tradeMcWebhook(jakarta.servlet.http.HttpServletRequest request) {
+        try {
+            String body = new String(request.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            log.info("TradeMC webhook: Content-Type={}, len={}", request.getContentType(), body.length());
 
-        // If form-urlencoded, the payload might be key=value pairs, not JSON.
-        // TradeMC docs say JSON but some setups send it differently.
-        String jsonPayload = payload;
-        if (contentType != null && contentType.contains("form-urlencoded")) {
-            // Body might be: data={"shop_id":...,"hash":"..."}
-            // or the entire body might be the JSON without a key
-            if (payload.contains("=")) {
-                int eq = payload.indexOf('=');
-                jsonPayload = java.net.URLDecoder.decode(payload.substring(eq + 1), java.nio.charset.StandardCharsets.UTF_8);
+            // If body is form-urlencoded (key=value&key2=value2), reconstruct JSON
+            // from parameter map. If body looks like JSON already, use as-is.
+            String jsonPayload;
+            if (body.startsWith("{")) {
+                jsonPayload = body;
+            } else {
+                // Form-encoded: rebuild JSON from request parameters.
+                // TradeMC sends flat form fields, but we need the original JSON
+                // structure for hash verification. Re-read from params.
+                var params = request.getParameterMap();
+                if (params != null && !params.isEmpty()) {
+                    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    // Flatten: each param key → first value
+                    var flat = new java.util.LinkedHashMap<String, Object>();
+                    params.forEach((k, v) -> {
+                        if (v != null && v.length > 0) flat.put(k, v.length == 1 ? v[0] : v);
+                    });
+                    jsonPayload = mapper.writeValueAsString(flat);
+                } else {
+                    // Last resort: URL-decode the whole body in case it's one big encoded JSON
+                    jsonPayload = java.net.URLDecoder.decode(body, java.nio.charset.StandardCharsets.UTF_8);
+                }
             }
-        }
 
-        String result = paymentService.handleTradeMcWebhook(jsonPayload);
-        return ResponseEntity.ok(result);
+            log.info("TradeMC webhook jsonPayload (len={}): {}", jsonPayload.length(),
+                    jsonPayload.length() > 500 ? jsonPayload.substring(0, 500) : jsonPayload);
+
+            String result = paymentService.handleTradeMcWebhook(jsonPayload);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("TradeMC webhook read error: {}", e.getMessage());
+            return ResponseEntity.ok("read error");
+        }
     }
 }
