@@ -393,6 +393,52 @@ cp -r "$FRONTEND_DIST/"* "$INSTALL_DIR/frontend/"
 chown -R craftcms:craftcms "$INSTALL_DIR/frontend"
 ok "Frontend заменён"
 
+# Patch index.html — inject site name, description, logo, URL from the DB
+# so the browser tab, link previews (OG tags), and favicon are correct from
+# the very first byte, with zero JS flicker.
+INDEX_HTML="$INSTALL_DIR/frontend/index.html"
+if [[ -f "$INDEX_HTML" ]] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; then
+  info "Патч index.html из БД..."
+  read -r DB_NAME DB_DESC DB_LOGO DB_URL < <(
+    docker exec -i craftcms-postgres psql -U craftcms craftcms -tAc "
+      SELECT
+        COALESCE(site_name, 'CraftCMS')              || '|' ||
+        COALESCE(site_description, 'Minecraft сервер') || '|' ||
+        COALESCE(logo_url, '/favicon.svg')            || '|' ||
+        COALESCE(site_url, '')
+      FROM site_settings WHERE id = 1;
+    " 2>>"$LOG_FILE" | {
+      IFS='|' read -r n d l u
+      echo "$n" "$d" "$l" "$u"
+    }
+  )
+  # Fallbacks if DB query failed
+  DB_NAME="${DB_NAME:-CraftCMS}"
+  DB_DESC="${DB_DESC:-Minecraft сервер}"
+  DB_LOGO="${DB_LOGO:-/favicon.svg}"
+  DB_URL="${DB_URL:-}"
+
+  # Use | as sed delimiter to avoid conflicts with URLs containing /
+  sed -i \
+    -e "s|__SITE_NAME__|${DB_NAME}|g" \
+    -e "s|__SITE_DESCRIPTION__|${DB_DESC}|g" \
+    -e "s|__FAVICON__|${DB_LOGO}|g" \
+    -e "s|__OG_IMAGE__|${DB_LOGO}|g" \
+    -e "s|__SITE_URL__|${DB_URL}|g" \
+    "$INDEX_HTML" 2>>"$LOG_FILE"
+  ok "index.html запатчен: title='${DB_NAME}', favicon='${DB_LOGO}'"
+else
+  # Fallback — replace placeholders with safe defaults so the page renders
+  sed -i \
+    -e 's|__SITE_NAME__|CraftCMS|g' \
+    -e 's|__SITE_DESCRIPTION__|Minecraft сервер|g' \
+    -e 's|__FAVICON__|/favicon.svg|g' \
+    -e 's|__OG_IMAGE__|/favicon.svg|g' \
+    -e 's|__SITE_URL__||g' \
+    "$INDEX_HTML" 2>>"$LOG_FILE" || true
+  warn "БД недоступна — index.html запатчен дефолтами"
+fi
+
 # ── Restart and verify ────────────────────────────────────────────────────────
 step "Перезапуск"
 systemctl start craftcms >>"$LOG_FILE" 2>&1 || err "Не удалось запустить craftcms"
