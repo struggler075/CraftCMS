@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCcw, ShieldCheck, ShieldX, KeyRound,
   ExternalLink, ChevronDown, ChevronUp, AlertTriangle, Loader2,
-  ArrowUpCircle, CheckCircle2, Clock, Terminal, X, WifiOff, BookmarkCheck,
+  ArrowUpCircle, CheckCircle2, Clock, Terminal, X, WifiOff,
 } from 'lucide-react'
 import { updatesApi, type UpdatesStatus, type Commit } from '../../services/api'
 import toast from 'react-hot-toast'
@@ -268,8 +268,10 @@ export default function AdminUpdates() {
   const [tokenInput, setTokenInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [applying, setApplying] = useState(false)
-  const [resetting, setResetting] = useState(false)
   const [showAllHistory, setShowAllHistory] = useState(false)
+  const [historySince, setHistorySince] = useState<string | null>(() =>
+    localStorage.getItem('cms_history_since')
+  )
 
   const load = (bust = false) => {
     setLoading(true)
@@ -299,26 +301,28 @@ export default function AdminUpdates() {
 
   const handleApply = () => setApplying(true)
 
-  const handleResetBaseline = async () => {
-    setResetting(true)
-    try {
-      const { message } = await updatesApi.resetBaseline()
-      toast.success(message)
-      load(true)
-    } catch {
-      toast.error('Не удалось сбросить baseline')
-    } finally {
-      setResetting(false)
-    }
+  const handleHideBefore = () => {
+    const now = new Date().toISOString()
+    localStorage.setItem('cms_history_since', now)
+    setHistorySince(now)
+  }
+
+  const handleClearFilter = () => {
+    localStorage.removeItem('cms_history_since')
+    setHistorySince(null)
   }
 
   const isActive       = data?.status === 'active'
   const isInactive     = data?.status === 'inactive'
   const isUnconfigured = data?.status === 'unconfigured'
 
+  const allInstalled = data?.installedCommits ?? []
+  const filteredInstalled = historySince
+    ? allInstalled.filter(c => new Date(c.date) >= new Date(historySince))
+    : allInstalled
   const visibleHistory = showAllHistory
-    ? (data?.installedCommits ?? [])
-    : (data?.installedCommits ?? []).slice(0, 5)
+    ? filteredInstalled
+    : filteredInstalled.slice(0, 5)
 
   return (
     <>
@@ -334,24 +338,11 @@ export default function AdminUpdates() {
             <h1 className="text-xl font-semibold text-c-text">Обновления</h1>
           </div>
           {!loading && (
-            <div className="flex items-center gap-2">
-              {isActive && (
-                <button
-                  onClick={handleResetBaseline}
-                  disabled={resetting}
-                  title="Отметить все текущие коммиты как установленные и скрыть их из обновлений"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-c-t2 hover:text-c-text border border-c-border hover:border-c-border-h rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {resetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookmarkCheck className="w-3.5 h-3.5" />}
-                  Сбросить baseline
-                </button>
-              )}
-              <button onClick={() => load(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-c-t2 hover:text-c-text border border-c-border hover:border-c-border-h rounded-lg transition-colors cursor-pointer">
-                <RefreshCcw className="w-3.5 h-3.5" />
-                Обновить
-              </button>
-            </div>
+            <button onClick={() => load(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-c-t2 hover:text-c-text border border-c-border hover:border-c-border-h rounded-lg transition-colors cursor-pointer">
+              <RefreshCcw className="w-3.5 h-3.5" />
+              Обновить
+            </button>
           )}
         </div>
 
@@ -473,24 +464,52 @@ export default function AdminUpdates() {
             </div>
 
             {/* Installed history */}
-            {isActive && data?.installedCommits && data.installedCommits.length > 0 && (
+            {isActive && allInstalled.length > 0 && (
               <div className="card rounded-xl p-5">
                 <div className="flex items-center gap-2 mb-5">
                   <Clock className="w-4 h-4 text-c-t2" />
                   <h2 className="text-sm font-semibold text-c-text">История установленных версий</h2>
+                  <div className="ml-auto flex items-center gap-2">
+                    {historySince ? (
+                      <>
+                        <span className="text-xs text-c-t3">
+                          с {new Date(historySince).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <button
+                          onClick={handleClearFilter}
+                          className="text-xs text-c-t3 hover:text-c-t2 underline transition-colors cursor-pointer"
+                        >
+                          Показать все
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={handleHideBefore}
+                        className="text-xs text-c-t3 hover:text-c-t2 transition-colors cursor-pointer"
+                      >
+                        Скрыть старые
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {visibleHistory.map((c, i) => (
-                  <CommitRow key={c.sha} commit={c} isLast={i === visibleHistory.length - 1} dim />
-                ))}
-                {data.installedCommits.length > 5 && (
-                  <button
-                    onClick={() => setShowAllHistory(!showAllHistory)}
-                    className="mt-2 text-xs text-c-t3 hover:text-c-t2 transition-colors cursor-pointer"
-                  >
-                    {showAllHistory
-                      ? 'Свернуть'
-                      : `Показать ещё ${data.installedCommits.length - 5}`}
-                  </button>
+                {filteredInstalled.length === 0 ? (
+                  <p className="text-xs text-c-t3 text-center py-4">Нет коммитов после выбранной даты</p>
+                ) : (
+                  <>
+                    {visibleHistory.map((c, i) => (
+                      <CommitRow key={c.sha} commit={c} isLast={i === visibleHistory.length - 1} dim />
+                    ))}
+                    {filteredInstalled.length > 5 && (
+                      <button
+                        onClick={() => setShowAllHistory(!showAllHistory)}
+                        className="mt-2 text-xs text-c-t3 hover:text-c-t2 transition-colors cursor-pointer"
+                      >
+                        {showAllHistory
+                          ? 'Свернуть'
+                          : `Показать ещё ${filteredInstalled.length - 5}`}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}
