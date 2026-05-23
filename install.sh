@@ -1143,7 +1143,7 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
     location /updater/ {
-        proxy_pass http://127.0.0.1:8082/;
+        proxy_pass http://127.0.0.1:8089/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -1216,7 +1216,7 @@ print_ok "CraftCMS запускается..."
 
 if [[ $UPDATER_BUILT -eq 1 ]]; then
   spin_run 15 "Запуск агента обновлений..." "systemctl start craftcms-updater" \
-    && print_ok "craftcms-updater запущен (порт 8081)" \
+    && print_ok "craftcms-updater запущен (порт 8089)" \
     || print_warn "craftcms-updater не запустился — journalctl -u craftcms-updater -n 30"
 fi
 
