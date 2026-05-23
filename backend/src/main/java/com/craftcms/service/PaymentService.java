@@ -349,57 +349,96 @@ public class PaymentService {
         }
     }
 
+    /**
+     * Handle TradeMC webhook. Mirrors the verified GProject implementation:
+     * parse JSON → remove "hash" key → re-serialize with PHP-style escaped
+     * slashes → SHA256(json + shopKey) → compare.
+     */
     @Transactional
+    @SuppressWarnings("unchecked")
     public String handleTradeMcWebhook(String rawBody) {
+        log.info("TradeMC webhook body (len={}): {}", rawBody.length(),
+                rawBody.length() > 500 ? rawBody.substring(0, 500) + "..." : rawBody);
+
         PaymentSettings s = getSettings();
         if (!s.isTrademcEnabled()) {
             log.warn("TradeMC webhook received but provider is disabled");
             return "disabled";
         }
 
-        // Parse JSON — we need the raw body for hash verification
-        String receivedHash = extractJson(rawBody, "hash");
-        if (receivedHash == null) {
-            log.warn("TradeMC webhook: no hash field");
-            return "no hash";
+        // 1. Parse JSON to a Map — same as GProject's req.body
+        Map<String, Object> data;
+        try {
+            data = new com.fasterxml.jackson.databind.ObjectMapper().readValue(rawBody, Map.class);
+        } catch (Exception e) {
+            log.warn("TradeMC webhook: failed to parse JSON: {}", e.getMessage());
+            return "invalid json";
         }
 
-        // Rebuild JSON without "hash" field and verify signature.
-        // TradeMC computes: SHA256(json_without_hash + shop_key)
-        // where json_without_hash follows PHP's json_encode (escapes /).
-        String jsonWithoutHash = removeTradeMcHashField(rawBody);
+        // 2. Extract and remove hash
+        Object hashObj = data.remove("hash");
+        if (hashObj == null) {
+            log.warn("TradeMC webhook: no hash field in parsed data. Keys: {}", data.keySet());
+            return "no hash";
+        }
+        String receivedHash = String.valueOf(hashObj);
+
+        // 3. Re-serialize without hash, escape / → \/ (PHP json_encode style)
+        String jsonWithoutHash;
+        try {
+            jsonWithoutHash = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writeValueAsString(data)
+                    .replace("/", "\\/");
+        } catch (Exception e) {
+            log.warn("TradeMC webhook: failed to re-serialize: {}", e.getMessage());
+            return "serialize error";
+        }
+
+        // 4. SHA256(json + shopKey)
         String expected = sha256Hex(jsonWithoutHash + s.getTrademcShopKey());
 
         if (!MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.UTF_8),
                 receivedHash.getBytes(StandardCharsets.UTF_8))) {
-            log.warn("TradeMC webhook: invalid hash");
+            log.warn("TradeMC webhook: hash mismatch. expected={}, received={}", expected, receivedHash);
             return "bad hash";
         }
+        log.info("TradeMC webhook: hash verified OK");
 
-        String shopId = extractJson(rawBody, "shop_id");
+        // 5. Validate shop_id
+        String shopId = String.valueOf(data.getOrDefault("shop_id", ""));
         if (!s.getTrademcShopId().equals(shopId)) {
             log.warn("TradeMC webhook: shop_id mismatch (expected={}, got={})", s.getTrademcShopId(), shopId);
             return "shop mismatch";
         }
 
-        String buyer = extractJson(rawBody, "buyer");
-        if (buyer == null || buyer.isBlank()) {
-            log.warn("TradeMC webhook: empty buyer");
-            return "no buyer";
+        // 6. Extract buyer and items
+        String buyer = String.valueOf(data.getOrDefault("buyer", "")).trim();
+        List<Map<String, Object>> items = data.get("items") instanceof List<?> list
+                ? (List<Map<String, Object>>) list : List.of();
+
+        if (buyer.isEmpty() || items.isEmpty()) {
+            log.warn("TradeMC webhook: empty buyer or items");
+            return "no buyer/items";
         }
 
-        // Credit the balance. Find the most recent pending TradeMC order for this buyer.
+        // 7. Sum total cost from items
+        BigDecimal totalCost = BigDecimal.ZERO;
+        for (var item : items) {
+            Object cost = item.get("cost");
+            if (cost != null) {
+                try { totalCost = totalCost.add(new BigDecimal(String.valueOf(cost))); }
+                catch (NumberFormatException ignored) {}
+            }
+        }
+
+        // 8. Find user and credit balance
         User user = userRepository.findByUsername(buyer).orElse(null);
         if (user == null) {
             log.warn("TradeMC webhook: user '{}' not found", buyer);
             return "user not found";
         }
 
-        // Sum up cost from items — this is what the user actually paid
-        BigDecimal totalCost = extractTradeMcTotalCost(rawBody);
-
-        // Find the pending order for this user (match by provider + status + user)
         TopUpOrder order = orderRepository
                 .findFirstByUserIdAndProviderAndStatusOrderByCreatedAtDesc(
                         user.getId(), PaymentProvider.TRADEMC, TopUpStatus.PENDING)
@@ -408,58 +447,13 @@ public class PaymentService {
         if (order != null) {
             completeOrder(order.getId());
             log.info("TradeMC: completed order {} for user {} (+{} ₽)", order.getId(), buyer, order.getAmount());
-        } else {
-            // No pending order found — credit directly based on paid amount.
-            // This handles edge cases where the order was lost or the user
-            // paid outside the normal flow.
-            if (totalCost.compareTo(BigDecimal.ZERO) > 0) {
-                user.setBalance(user.getBalance().add(totalCost));
-                userRepository.save(user);
-                log.info("TradeMC: direct credit for user {} (+{} ₽, no pending order)", buyer, totalCost);
-            }
+        } else if (totalCost.compareTo(BigDecimal.ZERO) > 0) {
+            user.setBalance(user.getBalance().add(totalCost));
+            userRepository.save(user);
+            log.info("TradeMC: direct credit for user {} (+{} ₽, no pending order)", buyer, totalCost);
         }
 
         return "ok";
-    }
-
-    /**
-     * Remove the "hash" key-value pair from the JSON payload for signature
-     * verification. TradeMC expects the exact JSON structure minus the hash
-     * field — including PHP-style escaped forward slashes.
-     */
-    private String removeTradeMcHashField(String json) {
-        // Remove ,"hash":"..." or "hash":"...", from the JSON string.
-        // This is robust for the TradeMC payload format.
-        String cleaned = json
-                .replaceAll(",\\s*\"hash\"\\s*:\\s*\"[^\"]*\"", "")
-                .replaceAll("\"hash\"\\s*:\\s*\"[^\"]*\"\\s*,?", "");
-        // Ensure no trailing comma before closing brace
-        cleaned = cleaned.replaceAll(",\\s*}", "}");
-        // PHP's json_encode escapes forward slashes
-        cleaned = cleaned.replace("/", "\\/");
-        return cleaned;
-    }
-
-    /** Extract the total cost from items[].cost fields in the webhook payload. */
-    private BigDecimal extractTradeMcTotalCost(String json) {
-        BigDecimal total = BigDecimal.ZERO;
-        int idx = 0;
-        while (true) {
-            idx = json.indexOf("\"cost\"", idx);
-            if (idx < 0) break;
-            int colon = json.indexOf(':', idx + 6);
-            if (colon < 0) break;
-            int start = colon + 1;
-            while (start < json.length() && Character.isWhitespace(json.charAt(start))) start++;
-            int end = start;
-            while (end < json.length() && "0123456789.".indexOf(json.charAt(end)) >= 0) end++;
-            if (end > start) {
-                try { total = total.add(new BigDecimal(json.substring(start, end))); }
-                catch (NumberFormatException ignored) {}
-            }
-            idx = end;
-        }
-        return total;
     }
 
     // ── Complete order ────────────────────────────────────────────────────────

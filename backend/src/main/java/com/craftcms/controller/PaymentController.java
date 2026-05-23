@@ -4,6 +4,7 @@ import com.craftcms.dto.TopUpOrderDto;
 import com.craftcms.service.PaymentService;
 import com.craftcms.service.SiteSettingsService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -17,6 +18,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/payments")
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentController {
 
     private final PaymentService paymentService;
@@ -98,9 +100,26 @@ public class PaymentController {
 
     // ── TradeMC webhook ─────────────────────────────────────────────────────
 
-    @PostMapping("/webhook/trademc")
-    public ResponseEntity<String> tradeMcWebhook(@RequestBody String payload) {
-        String result = paymentService.handleTradeMcWebhook(payload);
+    @PostMapping(value = "/webhook/trademc", consumes = {"application/json", "application/x-www-form-urlencoded", "text/plain", "*/*"})
+    public ResponseEntity<String> tradeMcWebhook(
+            @RequestBody String payload,
+            @RequestHeader(value = "Content-Type", required = false) String contentType) {
+        log.info("TradeMC webhook received: Content-Type={}, bodyLength={}", contentType, payload.length());
+        log.debug("TradeMC webhook body: {}", payload);
+
+        // If form-urlencoded, the payload might be key=value pairs, not JSON.
+        // TradeMC docs say JSON but some setups send it differently.
+        String jsonPayload = payload;
+        if (contentType != null && contentType.contains("form-urlencoded")) {
+            // Body might be: data={"shop_id":...,"hash":"..."}
+            // or the entire body might be the JSON without a key
+            if (payload.contains("=")) {
+                int eq = payload.indexOf('=');
+                jsonPayload = java.net.URLDecoder.decode(payload.substring(eq + 1), java.nio.charset.StandardCharsets.UTF_8);
+            }
+        }
+
+        String result = paymentService.handleTradeMcWebhook(jsonPayload);
         return ResponseEntity.ok(result);
     }
 }
