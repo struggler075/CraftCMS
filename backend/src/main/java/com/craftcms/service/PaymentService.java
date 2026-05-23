@@ -440,14 +440,15 @@ public class PaymentService {
             return "no buyer/items";
         }
 
-        // 7. Sum total cost from items
+        // 7. Sum paid amount from items.
+        // For regular items TradeMC puts the price in "cost".
+        // For "game currency" items, cost=0 and the real amount is in
+        // "game_currency" (units × price-per-unit, which is 1₽ in our setup).
         BigDecimal totalCost = BigDecimal.ZERO;
         for (var item : items) {
-            Object cost = item.get("cost");
-            if (cost != null) {
-                try { totalCost = totalCost.add(new BigDecimal(String.valueOf(cost))); }
-                catch (NumberFormatException ignored) {}
-            }
+            BigDecimal cost = toBd(item.get("cost"));
+            BigDecimal gameCurrency = toBd(item.get("game_currency"));
+            totalCost = totalCost.add(gameCurrency.compareTo(BigDecimal.ZERO) > 0 ? gameCurrency : cost);
         }
 
         // 8. Find user and credit balance
@@ -550,6 +551,12 @@ public class PaymentService {
             for (byte b : hash) sb.append(String.format("%02x", b));
             return sb.toString();
         } catch (Exception e) { throw new RuntimeException(e); }
+    }
+
+    private BigDecimal toBd(Object v) {
+        if (v == null) return BigDecimal.ZERO;
+        try { return new BigDecimal(String.valueOf(v)); }
+        catch (NumberFormatException e) { return BigDecimal.ZERO; }
     }
 
     private String enc(String s) {
