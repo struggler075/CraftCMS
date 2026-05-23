@@ -229,7 +229,39 @@ else
   info "Папка снапшотов уже есть"
 fi
 
-# 2. Drop ALL Hibernate-generated enum CHECK constraints.
+# 2. Pre-flight schema sync. Hibernate's ddl-auto: update is unreliable —
+#    it silently skips ALTER TABLE ADD COLUMN in various edge cases (locks,
+#    existing data, type mismatches). For a SaaS-grade deploy we can't depend
+#    on it. This block ensures every column the new JAR expects actually
+#    exists BEFORE the JAR boots. All statements are idempotent (ADD COLUMN
+#    IF NOT EXISTS). Add new columns here whenever you add fields to entities.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; then
+  info "Pre-flight schema sync..."
+  docker exec -i craftcms-postgres psql -U craftcms craftcms -v ON_ERROR_STOP=0 <<'SCHEMA' >>"$LOG_FILE" 2>&1
+-- payment_settings: TradeMC fields
+ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS trademc_enabled  boolean DEFAULT false;
+ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS trademc_shop_id  varchar(255) DEFAULT '';
+ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS trademc_item_id  varchar(255) DEFAULT '';
+ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS trademc_shop_key varchar(255) DEFAULT '';
+
+-- site_settings: version + updatedAt (optimistic locking / audit)
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS version    bigint DEFAULT 0 NOT NULL;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS updated_at timestamptz;
+
+-- users: GravitLauncher fields
+ALTER TABLE users ADD COLUMN IF NOT EXISTS uuid        char(36);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS accesstoken char(32);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS serverid    varchar(41);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS hwidid      bigint;
+
+-- products: soft-delete
+ALTER TABLE products ADD COLUMN IF NOT EXISTS deleted boolean DEFAULT false NOT NULL;
+SCHEMA
+  ok "Схема БД синхронизирована"
+fi
+
+# 3. Drop ALL Hibernate-generated enum CHECK constraints.
+#    (renumbered from 2)
 #    Hibernate's @Enumerated(EnumType.STRING) bakes in a CHECK with the enum
 #    values that existed when the table was FIRST CREATED. ddl-auto: update
 #    NEVER refreshes them, so adding any new enum value to any entity breaks
@@ -265,7 +297,7 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; 
   fi
 fi
 
-# 3. site_settings CHECK(id = 1). Hibernate's `ddl-auto: update` does NOT
+# 4. site_settings CHECK(id = 1). Hibernate's `ddl-auto: update` does NOT
 #    add CHECK constraints to existing tables, so we apply it once manually.
 #    The IF NOT EXISTS guard makes this safe to run on every update.sh.
 #    If the constraint can't be added because real data violates it (extra
