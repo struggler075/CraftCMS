@@ -48,15 +48,10 @@ step()  { echo -e "\n${BOLD}${CYAN}━━━ $* ${NC}"; log_file "STEP $*"; }
 info()  { echo -e "  ${DIM}→${NC}  $*"; log_file "INFO $*"; }
 warn()  { echo -e "  ${YELLOW}!${NC}  $*"; log_file "WARN $*"; }
 
-# ── Update lock — prevents deferred agent swap from killing an active update ──
-CMS_UPDATE_LOCK="/var/run/cms-update.lock"
-echo $$ > "$CMS_UPDATE_LOCK"
-
 # ── Service safety net ────────────────────────────────────────────────────────
 SERVICE_WAS_STOPPED=0
 restart_service_on_exit() {
   local code=$?
-  rm -f "$CMS_UPDATE_LOCK"
   if [[ $SERVICE_WAS_STOPPED -eq 1 ]]; then
     if ! systemctl is-active --quiet craftcms; then
       warn "Возвращаем craftcms в работу после прерывания..."
@@ -571,36 +566,12 @@ UPDATER_SVC
 
       # ── swap release binary ──────────────────────────────────────────────
       if systemctl is-active --quiet craftcms-updater 2>/dev/null; then
-        # Running inside the updater — can't stop ourselves.
-        # IMPORTANT: nohup/disown still lives in the same systemd cgroup as the
-        # service. When "systemctl stop craftcms-updater" runs, systemd sends
-        # SIGTERM to the *entire* cgroup including our swap script — it kills
-        # itself before the mv/start can happen.
-        # Fix: use systemd-run to launch the swap in its own transient cgroup
-        # so stopping craftcms-updater doesn't affect it.
+        # Running inside the updater agent — stage the new binary.
+        # ws_handler.ex schedules a graceful self-restart via systemd-run
+        # ~2 s after it sends exit=0 to the browser, so the WebSocket closes
+        # cleanly before the service stops. No artificial delay needed here.
         cp -r "_build/prod/rel/updater" /opt/craftcms-updater-new
-        # Write swap script without heredoc (heredoc inside deep if-nesting confuses bash parser)
-        {
-          echo '#!/bin/bash'
-          echo 'waited=0'
-          echo 'sleep 20'
-          echo 'while [[ -f /var/run/cms-update.lock ]] && [[ $waited -lt 1200 ]]; do'
-          echo '  sleep 3; waited=$((waited+3))'
-          echo 'done'
-          echo 'sleep 5'
-          echo 'systemctl stop craftcms-updater 2>/dev/null || true'
-          echo 'sleep 1'
-          echo 'rm -rf /opt/craftcms-updater'
-          echo 'mv /opt/craftcms-updater-new /opt/craftcms-updater'
-          echo 'systemctl start craftcms-updater'
-        } > /tmp/_cms_updater_swap.sh
-        chmod +x /tmp/_cms_updater_swap.sh
-        systemd-run --no-block --collect \
-          --description="CraftCMS updater binary swap" \
-          /tmp/_cms_updater_swap.sh \
-          >>"$LOG_FILE" 2>&1 \
-          && ok "Агент обновлений: новая версия применится через ~20 с" \
-          || warn "systemd-run не удался — агент не будет обновлён"
+        ok "Агент обновлений: новая версия готова — перезапустится после завершения"
       else
         # Stopped or first install — swap and start immediately.
         rm -rf /opt/craftcms-updater

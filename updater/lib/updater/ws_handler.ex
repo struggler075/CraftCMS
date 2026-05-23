@@ -70,7 +70,27 @@ defmodule Updater.WsHandler do
   # Script finished
   def websocket_info({port, {:exit_status, code}}, %{port: port} = state) do
     payload = Jason.encode!(%{type: "exit", code: code})
-    {:reply, {:text, payload}, Map.delete(state, :port)}
+    new_state = Map.delete(state, :port)
+    if code == 0 and File.exists?("/opt/craftcms-updater-new") do
+      # New agent binary was staged by update.sh. Schedule the self-swap 2 s
+      # from now so the browser has time to receive exit=0 before the service
+      # restarts. The WebSocket will be closed cleanly in :apply_self_update.
+      Process.send_after(self(), :apply_self_update, 2_000)
+    end
+    {:reply, {:text, payload}, new_state}
+  end
+
+  # Swap the staged binary and restart the agent. Runs in a systemd transient
+  # unit (own cgroup) so "systemctl stop craftcms-updater" can't kill the swap
+  # script before the mv + start completes.
+  def websocket_info(:apply_self_update, state) do
+    System.cmd("systemd-run", [
+      "--no-block", "--collect",
+      "--description=CraftCMS updater self-update",
+      "bash", "-c",
+      "sleep 1 && systemctl stop craftcms-updater 2>/dev/null; rm -rf /opt/craftcms-updater && mv /opt/craftcms-updater-new /opt/craftcms-updater && systemctl start craftcms-updater"
+    ], stderr_to_stdout: true)
+    {:stop, state}
   end
 
   def websocket_info(_msg, state), do: {:ok, state}
