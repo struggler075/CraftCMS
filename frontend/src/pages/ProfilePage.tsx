@@ -69,6 +69,7 @@ function TopUpModal({ onClose }: { onClose: () => void }) {
     if (!n || n <= 0) { toast.error('Введите сумму'); return }
     setLoading(true)
     try {
+      console.log("sum ", n);
       const { redirectUrl } = await paymentApi.initiate(n)
       window.location.href = redirectUrl
     } catch (e: unknown) {

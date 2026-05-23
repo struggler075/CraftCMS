@@ -47,38 +47,45 @@ public class PaymentService {
     public PaymentSettings updateSettings(PaymentSettings incoming) {
         PaymentSettings s = getSettings();
 
-        s.setFreekassaEnabled(incoming.isFreekassaEnabled());
+        // topUpProvider is the single source of truth for which provider
+        // is active. The individual *Enabled booleans are derived from it.
+        // This avoids primitive-boolean deserialization bugs where Jackson
+        // defaults missing fields to false and silently disables the provider.
+        String provider = incoming.getTopUpProvider() != null ? incoming.getTopUpProvider() : "";
+        s.setTopUpProvider(provider);
+        s.setFreekassaEnabled("FREEKASSA".equals(provider));
+        s.setUnitpayEnabled("UNITPAY".equals(provider));
+        s.setStripeEnabled("STRIPE".equals(provider));
+        s.setYookassaEnabled("YOOKASSA".equals(provider));
+        s.setTrademcEnabled("TRADEMC".equals(provider));
+
+        // Credentials — only update if non-blank (don't clear secrets on partial save)
         if (incoming.getFreekassaMerchantId() != null) s.setFreekassaMerchantId(incoming.getFreekassaMerchantId());
         if (incoming.getFreekassaSecretKey1() != null && !incoming.getFreekassaSecretKey1().isBlank())
             s.setFreekassaSecretKey1(incoming.getFreekassaSecretKey1());
         if (incoming.getFreekassaSecretKey2() != null && !incoming.getFreekassaSecretKey2().isBlank())
             s.setFreekassaSecretKey2(incoming.getFreekassaSecretKey2());
 
-        s.setUnitpayEnabled(incoming.isUnitpayEnabled());
         if (incoming.getUnitpayPublicKey() != null) s.setUnitpayPublicKey(incoming.getUnitpayPublicKey());
         if (incoming.getUnitpaySecretKey() != null && !incoming.getUnitpaySecretKey().isBlank())
             s.setUnitpaySecretKey(incoming.getUnitpaySecretKey());
 
-        s.setStripeEnabled(incoming.isStripeEnabled());
         if (incoming.getStripePublishableKey() != null) s.setStripePublishableKey(incoming.getStripePublishableKey());
         if (incoming.getStripeSecretKey() != null && !incoming.getStripeSecretKey().isBlank())
             s.setStripeSecretKey(incoming.getStripeSecretKey());
         if (incoming.getStripeWebhookSecret() != null && !incoming.getStripeWebhookSecret().isBlank())
             s.setStripeWebhookSecret(incoming.getStripeWebhookSecret());
 
-        s.setYookassaEnabled(incoming.isYookassaEnabled());
         if (incoming.getYookassaShopId() != null) s.setYookassaShopId(incoming.getYookassaShopId());
         if (incoming.getYookassaSecretKey() != null && !incoming.getYookassaSecretKey().isBlank())
             s.setYookassaSecretKey(incoming.getYookassaSecretKey());
 
-        s.setTrademcEnabled(incoming.isTrademcEnabled());
         if (incoming.getTrademcShopId() != null) s.setTrademcShopId(incoming.getTrademcShopId());
         if (incoming.getTrademcItemId() != null) s.setTrademcItemId(incoming.getTrademcItemId());
         if (incoming.getTrademcShopKey() != null && !incoming.getTrademcShopKey().isBlank())
             s.setTrademcShopKey(incoming.getTrademcShopKey());
 
         s.setShowLogosInFooter(incoming.isShowLogosInFooter());
-        if (incoming.getTopUpProvider() != null) s.setTopUpProvider(incoming.getTopUpProvider());
         return settingsRepository.save(s);
     }
 
@@ -439,15 +446,32 @@ public class PaymentService {
             return "user not found";
         }
 
+        if (totalCost.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("TradeMC webhook: zero or negative total cost for buyer '{}'", buyer);
+            return "zero cost";
+        }
+
+        // Find pending order and complete it with the ACTUAL paid amount from
+        // the webhook (items[].cost), not the order's stored amount. This
+        // prevents crediting a stale pending order's amount (e.g. 500₽ from
+        // an old test) when the user only paid 1₽ now.
         TopUpOrder order = orderRepository
                 .findFirstByUserIdAndProviderAndStatusOrderByCreatedAtDesc(
                         user.getId(), PaymentProvider.TRADEMC, TopUpStatus.PENDING)
                 .orElse(null);
 
         if (order != null) {
-            completeOrder(order.getId());
-            log.info("TradeMC: completed order {} for user {} (+{} ₽)", order.getId(), buyer, order.getAmount());
-        } else if (totalCost.compareTo(BigDecimal.ZERO) > 0) {
+            // Override stored amount with what was actually paid
+            order.setAmount(totalCost);
+            order.setStatus(TopUpStatus.COMPLETED);
+            order.setCompletedAt(LocalDateTime.now());
+            orderRepository.save(order);
+
+            user.setBalance(user.getBalance().add(totalCost));
+            userRepository.save(user);
+            log.info("TradeMC: completed order {} for user {} (+{} ₽)", order.getId(), buyer, totalCost);
+        } else {
+            // No pending order — credit directly (user paid outside normal flow)
             user.setBalance(user.getBalance().add(totalCost));
             userRepository.save(user);
             log.info("TradeMC: direct credit for user {} (+{} ₽, no pending order)", buyer, totalCost);
