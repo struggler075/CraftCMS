@@ -579,24 +579,21 @@ UPDATER_SVC
         # Fix: use systemd-run to launch the swap in its own transient cgroup
         # so stopping craftcms-updater doesn't affect it.
         cp -r "_build/prod/rel/updater" /opt/craftcms-updater-new
-        cat > /tmp/_cms_updater_swap.sh << 'SWAP_SCRIPT'
-#!/bin/bash
-sleep 20
-# Wait for any active update.sh to finish (it holds /var/run/cms-update.lock).
-# This prevents killing a concurrent update's WebSocket mid-run.
-waited=0
-while [[ -f /var/run/cms-update.lock ]] && [[ $waited -lt 1200 ]]; do
-  sleep 3
-  waited=$((waited + 3))
-done
-# Give the browser a moment to receive the exit=0 message before we drop the socket.
-sleep 5
-systemctl stop  craftcms-updater 2>/dev/null || true
-sleep 1
-rm -rf /opt/craftcms-updater
-mv /opt/craftcms-updater-new /opt/craftcms-updater
-systemctl start craftcms-updater
-SWAP_SCRIPT
+        # Write swap script without heredoc (heredoc inside deep if-nesting confuses bash parser)
+        {
+          echo '#!/bin/bash'
+          echo 'waited=0'
+          echo 'sleep 20'
+          echo 'while [[ -f /var/run/cms-update.lock ]] && [[ $waited -lt 1200 ]]; do'
+          echo '  sleep 3; waited=$((waited+3))'
+          echo 'done'
+          echo 'sleep 5'
+          echo 'systemctl stop craftcms-updater 2>/dev/null || true'
+          echo 'sleep 1'
+          echo 'rm -rf /opt/craftcms-updater'
+          echo 'mv /opt/craftcms-updater-new /opt/craftcms-updater'
+          echo 'systemctl start craftcms-updater'
+        } > /tmp/_cms_updater_swap.sh
         chmod +x /tmp/_cms_updater_swap.sh
         systemd-run --no-block --collect \
           --description="CraftCMS updater binary swap" \
