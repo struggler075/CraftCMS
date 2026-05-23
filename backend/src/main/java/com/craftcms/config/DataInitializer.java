@@ -2,6 +2,7 @@ package com.craftcms.config;
 
 import com.craftcms.model.*;
 import com.craftcms.repository.*;
+import com.craftcms.service.IndexHtmlPatcher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -32,6 +33,7 @@ public class DataInitializer implements CommandLineRunner {
     private final SiteSettingsRepository siteSettingsRepository;
     private final SmtpSettingsRepository smtpSettingsRepository;
     private final PasswordEncoder passwordEncoder;
+    private final IndexHtmlPatcher indexHtmlPatcher;
 
     @Override
     @Transactional
@@ -65,6 +67,10 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         backfillUserUuids();
+
+        // Patch index.html with current settings on every boot so bots/crawlers
+        // see correct OG tags even if the admin hasn't saved settings since deploy.
+        siteSettingsRepository.findById(1L).ifPresent(indexHtmlPatcher::patch);
     }
 
     /**

@@ -2,22 +2,41 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="__FAVICON__" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="__SITE_DESCRIPTION__" />
     <meta name="theme-color" content="#0a0a0f" />
-
-    <!-- Open Graph — превью ссылки в мессенджерах и соцсетях -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="__SITE_NAME__" />
-    <meta property="og:description" content="__SITE_DESCRIPTION__" />
-    <meta property="og:image" content="__OG_IMAGE__" />
-    <meta property="og:url" content="__SITE_URL__" />
-
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-    <title>__SITE_NAME__</title>
+    <script>
+      // SSR-lite: fetch site meta before first paint so <title>, favicon,
+      // and OG tags are always correct — no placeholder flash, no JS flicker.
+      // Blocks rendering for max ~300ms; if the API is down the page still
+      // loads with empty-string fallbacks (React fills them on mount).
+      try {
+        var r = new XMLHttpRequest();
+        r.open('GET', '/api/settings', false);          // synchronous
+        r.timeout = 300;
+        r.send();
+        if (r.status === 200) {
+          var s = JSON.parse(r.responseText);
+          var n = s.siteName || '';
+          var d = s.siteDescription || '';
+          var l = s.logoUrl || '/favicon.svg';
+          var u = s.siteUrl || '';
+          document.title = n;
+          document.write(
+            '<link rel="icon" href="' + l + '">' +
+            '<meta name="description" content="' + d.replace(/"/g,'&quot;') + '">' +
+            '<meta property="og:type" content="website">' +
+            '<meta property="og:title" content="' + n.replace(/"/g,'&quot;') + '">' +
+            '<meta property="og:description" content="' + d.replace(/"/g,'&quot;') + '">' +
+            '<meta property="og:image" content="' + l + '">' +
+            '<meta property="og:url" content="' + u + '">'
+          );
+        }
+      } catch(e) {}
+    </script>
+    <title></title>
   </head>
   <body>
     <div id="root"></div>

@@ -11,13 +11,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Patches the static {@code index.html} served by nginx so that the
- * {@code <title>}, {@code og:*} meta tags, and favicon reflect the
- * current site settings without waiting for a full redeploy.
+ * Patches the static {@code index.html} served by nginx so that bots,
+ * crawlers, and link-preview engines (Telegram, Discord, VK, Google) see
+ * the correct {@code <title>}, {@code og:*} meta tags, favicon, and
+ * description <b>without executing JavaScript</b>.
  *
- * <p>Called by {@link SiteSettingsService#update} after every successful
- * save. Failures are logged but never propagate — the site keeps working
- * even if the file can't be written (read-only FS, wrong path, etc).
+ * <p>Browser users get their values from a synchronous XHR in the HTML
+ * {@code <head>} that runs before first paint — this patcher exists only
+ * for non-JS consumers. Called after every settings save and on deploy.
  */
 @Service
 @Slf4j
@@ -25,6 +26,8 @@ public class IndexHtmlPatcher {
 
     @Value("${app.frontend.path:./frontend}")
     private String frontendPath;
+
+    private static final String OG_MARKER = "<!-- og-meta -->";
 
     public void patch(SiteSettings settings) {
         Path index = Path.of(frontendPath, "index.html");
@@ -42,24 +45,28 @@ public class IndexHtmlPatcher {
             String logo = safe(settings.getLogoUrl(), "/favicon.svg");
             String url  = safe(settings.getSiteUrl(), "");
 
-            // <title>...</title>
-            html = html.replaceAll("<title>[^<]*</title>", "<title>" + escHtml(name) + "</title>");
+            // 1. <title>
+            html = html.replaceAll("<title>[^<]*</title>", "<title>" + esc(name) + "</title>");
 
-            // <meta property="og:title" content="..." />
-            html = replaceMetaContent(html, "og:title", name);
-            html = replaceMetaContent(html, "og:description", desc);
-            html = replaceMetaContent(html, "og:image", logo);
-            html = replaceMetaContent(html, "og:url", url);
+            // 2. Static OG block for bots — insert or replace after </script>
+            String ogBlock = OG_MARKER + "\n"
+                    + "    <link rel=\"icon\" href=\"" + esc(logo) + "\">\n"
+                    + "    <meta name=\"description\" content=\"" + esc(desc) + "\">\n"
+                    + "    <meta property=\"og:type\" content=\"website\">\n"
+                    + "    <meta property=\"og:title\" content=\"" + esc(name) + "\">\n"
+                    + "    <meta property=\"og:description\" content=\"" + esc(desc) + "\">\n"
+                    + "    <meta property=\"og:image\" content=\"" + esc(logo) + "\">\n"
+                    + "    <meta property=\"og:url\" content=\"" + esc(url) + "\">\n"
+                    + "    <!-- /og-meta -->";
 
-            // <meta name="description" content="..." />
-            html = html.replaceAll(
-                    "(<meta\\s+name=\"description\"\\s+content=\")[^\"]*\"",
-                    "$1" + escHtml(desc) + "\"");
-
-            // <link rel="icon" ... href="..." />
-            html = html.replaceAll(
-                    "(<link\\s+rel=\"icon\"[^>]*href=\")[^\"]*\"",
-                    "$1" + escHtml(logo) + "\"");
+            if (html.contains(OG_MARKER)) {
+                html = html.replaceAll(
+                        "(?s)" + OG_MARKER.replace("<!--", "<!--") + ".*?<!-- /og-meta -->",
+                        ogBlock);
+            } else {
+                // First time — inject right before </head>
+                html = html.replace("</head>", ogBlock + "\n  </head>");
+            }
 
             if (!html.equals(original)) {
                 Files.writeString(index, html, StandardCharsets.UTF_8);
@@ -70,18 +77,12 @@ public class IndexHtmlPatcher {
         }
     }
 
-    private String replaceMetaContent(String html, String property, String value) {
-        return html.replaceAll(
-                "(<meta\\s+property=\"" + property + "\"\\s+content=\")[^\"]*\"",
-                "$1" + escHtml(value) + "\"");
-    }
-
-    private String escHtml(String s) {
+    private static String esc(String s) {
         return s.replace("&", "&amp;").replace("\"", "&quot;")
                 .replace("<", "&lt;").replace(">", "&gt;");
     }
 
-    private String safe(String value, String fallback) {
+    private static String safe(String value, String fallback) {
         return value != null && !value.isBlank() ? value : fallback;
     }
 }
