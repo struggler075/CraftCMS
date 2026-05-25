@@ -668,11 +668,16 @@ UPDATER_SVC
   fi
 fi
 
-# Copy maintenance scripts to install dir so they're always up to date
+# Copy maintenance scripts to install dir so they're always up to date.
+# IMPORTANT: use cp→mv (atomic rename) instead of plain cp so that bash's
+# open file descriptor for the currently-running /opt/craftcms/update.sh
+# keeps reading the OLD inode. A plain cp truncates+rewrites the same inode,
+# causing bash to read the new file content mid-execution at the wrong offset.
 for _s in update.sh install.sh enable-ssl.sh; do
   if [[ -f "$SRC_DIR/$_s" ]]; then
-    cp "$SRC_DIR/$_s" "$INSTALL_DIR/$_s"
-    chmod +x "$INSTALL_DIR/$_s"
+    cp "$SRC_DIR/$_s" "$INSTALL_DIR/$_s.new"
+    chmod +x "$INSTALL_DIR/$_s.new"
+    mv -f "$INSTALL_DIR/$_s.new" "$INSTALL_DIR/$_s"
     ok "Скрипт обновлён: $INSTALL_DIR/$_s"
   fi
 done
