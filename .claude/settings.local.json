@@ -25,7 +25,10 @@
       "Bash(dir \"C:\\\\Users\\\\admin\\\\Desktop\\\\CMSMinecraft\")",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(xargs grep -l \"api/admin/updates\")",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(bash *)",
+      "Bash(grep -n \"DO\\\\|\\\\\\\\$\\\\\\\\$\\\\|BEGIN\\\\|SCHEMA\\\\|quote_nullable\" /c/Users/admin/Desktop/CMSMinecraft/update.sh)",
+      "Bash(Select-Object -First 30)"
     ]
   }
 }
