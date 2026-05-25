@@ -9,6 +9,21 @@
 # ==============================================================================
 
 [ -z "$BASH_VERSION" ] && exec bash "$0" "$@"
+
+# Guard against the self-modifying-script bug: this script copies a newer
+# version of itself to $INSTALL_DIR at the end.  If the running file IS the
+# installed copy, bash may read the new content from the old byte offset and
+# hit a syntax error.  Re-exec from a disposable temp copy so the running
+# file is never overwritten.
+if [[ -z "${_CMS_UPDATE_REEXEC:-}" ]]; then
+  _tmp=$(mktemp /tmp/craftcms-update-XXXXXX.sh)
+  cp -- "$0" "$_tmp"
+  chmod +x "$_tmp"
+  export _CMS_UPDATE_REEXEC=1
+  exec bash "$_tmp" "$@"
+fi
+unset _CMS_UPDATE_REEXEC
+
 set -Eeuo pipefail
 
 # ── Flags ─────────────────────────────────────────────────────────────────────
