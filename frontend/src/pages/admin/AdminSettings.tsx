@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Settings, Plus, Trash2, GripVertical, Check, ExternalLink, Upload, Mail, Server, Eye, EyeOff, Send, Copy, Plug, Palette, RotateCcw, Image as ImageIcon, X } from 'lucide-react'
+import { Settings, Plus, Trash2, GripVertical, Check, ExternalLink, Upload, Mail, Server, Eye, EyeOff, Send, Plug, Palette, RotateCcw, Image as ImageIcon, X } from 'lucide-react'
 import { adminApi, adminDonateApi, smtpApi, type SmtpSettings } from '../../services/api'
 import { useSiteSettings, parseFooterColumns, applyColors, type FooterColumn, type FooterLink } from '../../store/siteSettingsStore'
 import toast from 'react-hot-toast'
@@ -127,7 +127,6 @@ export default function AdminSettings() {
 
   // Bridge fields
   const [banKickMessage, setBanKickMessage] = useState('')
-  const [bridgeApiKey, setBridgeApiKey] = useState('')
 
   // General fields
   const [siteName, setSiteName] = useState('')
@@ -160,7 +159,6 @@ export default function AdminSettings() {
     setPrimaryColor(settings.primaryColor ?? '#7c3aed')
     setBgColor(settings.bgColor ?? '#0a0a0f')
     setBanKickMessage(settings.banKickMessage ?? '§cВы заблокированы на этом сервере.\n§7Причина: §f{reason}')
-    setBridgeApiKey(settings.bridgeApiKey ?? '')
     setColumns(parseFooterColumns(settings.footerColumnsJson))
   }, [settings])
 
@@ -198,7 +196,6 @@ export default function AdminSettings() {
     primaryColor,
     bgColor,
     banKickMessage,
-    bridgeApiKey,
     footerColumnsJson: JSON.stringify(columns),
   })
 
@@ -495,27 +492,14 @@ export default function AdminSettings() {
 
         {/* ── Bridge Plugin ───────────────────────────────────────────────── */}
         <Section title="Bridge Plugin" icon={Plug}>
-          <Field label="API ключ плагина" hint="Скопируйте в config.yml плагина. Меняйте только при компрометации.">
-            <div className="flex gap-2">
-              <input value={bridgeApiKey} onChange={(e) => setBridgeApiKey(e.target.value)}
-                className="input font-mono text-xs" placeholder="bridge-api-key" />
-              <button type="button" onClick={() => { navigator.clipboard.writeText(bridgeApiKey); toast.success('Скопировано') }}
-                className="px-3 py-2 bg-c-bg3 border border-c-border hover:border-c-border-h rounded-lg text-c-t2 hover:text-c-text transition-colors cursor-pointer shrink-0">
-                <Copy className="w-4 h-4" />
-              </button>
-            </div>
-          </Field>
-          <Field label="Сообщение при бане" hint="Поддерживает §-коды цветов. Плейсхолдер {reason} — причина бана.">
+          <Field label="Сообщение при бане" hint="Глобальное для всех серверов. Поддерживает §-коды цветов. Плейсхолдер {reason} — причина бана.">
             <textarea value={banKickMessage} onChange={(e) => setBanKickMessage(e.target.value)}
               className="input min-h-[72px] resize-y font-mono text-xs"
               placeholder="§cВы заблокированы.\n§7Причина: §f{reason}" />
           </Field>
           <div className="bg-c-bg2 border border-c-border rounded-xl p-3 text-xs text-c-t3 space-y-1">
-            <p className="font-medium text-c-t2">Как подключить плагин:</p>
-            <p>1. Собери плагин: <code className="text-c-primary">mvn package</code> в папке <code className="text-c-primary">BridgePlugin/</code></p>
-            <p>2. Скопируй <code className="text-c-primary">BridgePlugin.jar</code> в <code className="text-c-primary">plugins/</code> сервера</p>
-            <p>3. В <code className="text-c-primary">config.yml</code> плагина укажи URL бэкенда и API ключ выше</p>
-            <p>4. Перезагрузи сервер. Команда <code className="text-c-primary">/cart</code> выдаёт купленные товары.</p>
+            <p className="font-medium text-c-t2">API ключи настраиваются отдельно для каждого сервера.</p>
+            <p>Перейдите в раздел <code className="text-c-primary">Серверный Плагин</code> в меню слева для генерации ключей и скачивания JAR.</p>
           </div>
         </Section>
 
