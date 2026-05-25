@@ -105,6 +105,27 @@ public class BridgeController {
 
     // ── Ban check ──────────────────────────────────────────────────────────────
 
+    /**
+     * Public endpoint — no API key required. Returns global ban status for
+     * the player regardless of which server is asking. Used by BridgePlugin's
+     * join listener so ban enforcement works without a configured API key and
+     * is not scoped to a single server.
+     */
+    @GetMapping("/player/{username}/ban")
+    public ResponseEntity<Map<String, Object>> getBanStatus(@PathVariable String username) {
+        User user = userRepository.findByUsername(username).orElse(null);
+        if (user == null) {
+            return ResponseEntity.ok(Map.of("blocked", false, "exists", false));
+        }
+        if (user.isBlocked()) {
+            SiteSettings s = siteSettingsService.get();
+            String reason = user.getBlockReason() != null ? user.getBlockReason() : "Нарушение правил";
+            String msg = s.getBanKickMessage().replace("{reason}", reason);
+            return ResponseEntity.ok(Map.of("blocked", true, "exists", true, "kickMessage", msg));
+        }
+        return ResponseEntity.ok(Map.of("blocked", false, "exists", true));
+    }
+
     @GetMapping("/player/{username}/status")
     public ResponseEntity<Map<String, Object>> getStatus(
             @PathVariable String username, HttpServletRequest req) {

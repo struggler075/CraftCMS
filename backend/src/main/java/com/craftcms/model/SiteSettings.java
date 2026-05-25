@@ -1,24 +1,21 @@
 package com.craftcms.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.*;
 
 import java.time.Instant;
 
 /**
  * Singleton entity — by design exactly one row exists with id=1.
- * The CHECK constraint guarantees no second row can ever be inserted,
- * even by hand from psql. {@link com.craftcms.service.SiteSettingsService}
- * always reads/writes that single row.
+ * {@link com.craftcms.service.SiteSettingsService} always reads/writes that single row.
  */
 @Entity
-@Table(
-        name = "site_settings",
-        uniqueConstraints = @UniqueConstraint(name = "uq_site_settings_singleton", columnNames = "id")
-)
-@org.hibernate.annotations.Check(constraints = "id = 1")
+@Table(name = "site_settings")
 @Getter
 @Setter
 @NoArgsConstructor
