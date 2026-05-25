@@ -38,6 +38,21 @@ public class BridgeApi {
 
     /**
      * Returns the kick message if banned, null if not banned.
+     * Uses the public /ban endpoint — no API key required, global scope.
+     * Throws IOException on connection failure.
+     */
+    public String checkBanPublic(String username) throws IOException {
+        JsonObject response = getPublic("/api/bridge/player/" + encode(username) + "/ban");
+        if (response.has("blocked") && response.get("blocked").getAsBoolean()) {
+            return response.has("kickMessage")
+                    ? response.get("kickMessage").getAsString()
+                    : "§cВы заблокированы на этом сервере.";
+        }
+        return null;
+    }
+
+    /**
+     * Returns the kick message if banned, null if not banned.
      * Throws IOException on connection failure.
      */
     public String checkBan(String username) throws IOException {
@@ -77,6 +92,11 @@ public class BridgeApi {
         return readObject(conn);
     }
 
+    private JsonObject getPublic(String path) throws IOException {
+        HttpURLConnection conn = openConnectionPublic(path, "GET");
+        return readObject(conn);
+    }
+
     private JsonArray getArray(String path) throws IOException {
         HttpURLConnection conn = openConnection(path, "GET");
         int status = conn.getResponseCode();
@@ -98,6 +118,16 @@ public class BridgeApi {
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod(method);
         conn.setRequestProperty("X-Bridge-Key", apiKey);
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(5000);
+        return conn;
+    }
+
+    private HttpURLConnection openConnectionPublic(String path, String method) throws IOException {
+        URL url = new URL(baseUrl + path);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod(method);
         conn.setRequestProperty("Content-Type", "application/json");
         conn.setConnectTimeout(5000);
         conn.setReadTimeout(5000);

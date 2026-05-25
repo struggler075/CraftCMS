@@ -19,7 +19,7 @@ public class JoinListener implements Listener {
         if (!plugin.getConfig().getBoolean("ban-check-enabled", true)) return;
 
         try {
-            String kickMessage = plugin.getApi().checkBan(event.getName());
+            String kickMessage = plugin.getApi().checkBanPublic(event.getName());
             plugin.onRequestSuccess();
             if (kickMessage != null) {
                 String formatted = kickMessage.replace("\\n", "\n");

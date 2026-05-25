@@ -235,6 +235,20 @@ if [[ -f "$APP_YML" ]]; then
   fi
 fi
 
+# 1b-2. Ensure server.address: 0.0.0.0 is present in application.yml.
+#       Without this Spring Boot may bind only to the public interface on some
+#       JDK/OS combinations — localhost/127.0.0.1 become unreachable, which
+#       breaks BridgePlugin and any locally-running tools.
+if [[ -f "$APP_YML" ]]; then
+  if ! grep -q 'address:' "$APP_YML" 2>/dev/null; then
+    sed -i '/^\s*port:/a\  address: 0.0.0.0' "$APP_YML" 2>>"$LOG_FILE" \
+      && ok "Добавлен server.address: 0.0.0.0 в application.yml" \
+      || warn "Не удалось добавить server.address — добавь вручную"
+  else
+    info "server.address уже есть в application.yml"
+  fi
+fi
+
 # 1b. site-settings snapshots dir. SiteSettingsBackupService writes here every
 #     hour and before every admin save. Created on fresh installs by install.sh,
 #     but old prod boxes don't have it yet.
@@ -278,6 +292,16 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS deleted boolean DEFAULT false NOT 
 
 -- site_settings: GitHub license token
 ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS github_token text;
+
+-- site_settings: drop redundant unique constraint on PK column that Hibernate
+-- 6.x sometimes conflicts with on ddl-auto: update, causing row deletion.
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'uq_site_settings_singleton'
+  ) THEN
+    ALTER TABLE site_settings DROP CONSTRAINT uq_site_settings_singleton;
+  END IF;
+END $$;
 SCHEMA
   ok "Схема БД синхронизирована"
 fi
@@ -305,7 +329,6 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; 
     JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
     WHERE con.contype = 'c'
       AND nsp.nspname = 'public'
-      AND con.conname <> 'site_settings_singleton_chk'
       AND pg_get_constraintdef(con.oid) ~ 'ANY'
   " 2>>"$LOG_FILE" || true)
 
@@ -319,34 +342,26 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; 
   fi
 fi
 
-# 4. site_settings CHECK(id = 1). Hibernate's `ddl-auto: update` does NOT
-#    add CHECK constraints to existing tables, so we apply it once manually.
-#    The IF NOT EXISTS guard makes this safe to run on every update.sh.
-#    If the constraint can't be added because real data violates it (extra
-#    rows with id != 1 — which would be the very bug we're fixing), we
-#    surface a loud warning and let the operator decide.
+# 4. DROP site_settings_singleton_chk if it still exists on the DB.
+#    The @org.hibernate.annotations.Check(constraints = "id = 1") annotation
+#    was removed from SiteSettings.java because on some Hibernate 6.x builds
+#    ddl-auto: update attempts to re-add the CHECK during startup, which
+#    conflicts with the manually-added constraint and can cause the singleton
+#    row (id=1) to be dropped — wiping all site settings on every deploy.
+#    Since id is already the PRIMARY KEY this constraint is entirely redundant.
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; then
   PG_DDL=$(docker exec -i craftcms-postgres psql -U craftcms craftcms -tAc \
     "SELECT 1 FROM pg_constraint WHERE conname='site_settings_singleton_chk'" 2>>"$LOG_FILE" || true)
   if [[ "$PG_DDL" == "1" ]]; then
-    info "CHECK constraint site_settings_singleton_chk уже существует"
-  else
-    # Check first that current data is compliant — easier to read this
-    # diagnostic in the log than a raw "violates check" error from ALTER.
-    BAD_ROWS=$(docker exec -i craftcms-postgres psql -U craftcms craftcms -tAc \
-      "SELECT COUNT(*) FROM site_settings WHERE id <> 1" 2>>"$LOG_FILE" || echo "?")
-    if [[ "$BAD_ROWS" != "0" ]]; then
-      warn "В site_settings есть ${BAD_ROWS} строк с id<>1 — CHECK не добавляется (нужна ручная очистка)"
-      log_file "Skipping CHECK constraint: ${BAD_ROWS} rows with id<>1"
+    if docker exec -i craftcms-postgres psql -U craftcms craftcms \
+      -c "ALTER TABLE site_settings DROP CONSTRAINT site_settings_singleton_chk;" \
+      >>"$LOG_FILE" 2>&1; then
+      ok "CHECK constraint site_settings_singleton_chk удалён (был источником сброса настроек)"
     else
-      if docker exec -i craftcms-postgres psql -U craftcms craftcms \
-        -c "ALTER TABLE site_settings ADD CONSTRAINT site_settings_singleton_chk CHECK (id = 1);" \
-        >>"$LOG_FILE" 2>&1; then
-        ok "CHECK constraint site_settings_singleton_chk добавлен"
-      else
-        warn "Не удалось добавить CHECK constraint — смотри лог"
-      fi
+      warn "Не удалось удалить site_settings_singleton_chk — смотри лог"
     fi
+  else
+    info "site_settings_singleton_chk не существует — ничего удалять не нужно"
   fi
 else
   warn "Контейнер craftcms-postgres не найден — миграции БД пропущены"
@@ -392,6 +407,44 @@ log_file "Backup dir: ${BACKUP_DIR}"
 cp "$INSTALL_DIR/craftcms.jar" "$BACKUP_DIR/craftcms.jar" 2>/dev/null || true
 [[ -f "$INSTALL_DIR/BridgePlugin.jar" ]] && cp "$INSTALL_DIR/BridgePlugin.jar" "$BACKUP_DIR/BridgePlugin.jar"
 # Frontend backup omitted — it's static files, easy to re-deploy on demand.
+
+# Snapshot site_settings BEFORE stopping the service so we can restore them
+# after the JAR boots. Hibernate's @Check / @UniqueConstraint on the
+# site_settings table caused the singleton row to vanish on some Hibernate 6.x
+# builds — the Java fix (removed @Check) is in this commit, but the migration
+# also guards against edge cases by unconditionally re-applying all user values
+# once the new JAR is confirmed healthy.
+SETTINGS_SNAPSHOT=""
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; then
+  SETTINGS_SNAPSHOT=$(docker exec -i craftcms-postgres psql -U craftcms craftcms -tAc "
+    SELECT
+      'UPDATE site_settings SET ' ||
+      'site_name='         || quote_nullable(site_name)          || ',' ||
+      'site_description='  || quote_nullable(site_description)   || ',' ||
+      'logo_url='          || quote_nullable(logo_url)           || ',' ||
+      'copyright_text='    || quote_nullable(copyright_text)     || ',' ||
+      'disclaimer_text='   || quote_nullable(disclaimer_text)    || ',' ||
+      'donate_header_image_url=' || quote_nullable(donate_header_image_url) || ',' ||
+      'site_url='          || quote_nullable(site_url)           || ',' ||
+      'primary_color='     || quote_nullable(primary_color)      || ',' ||
+      'bg_color='          || quote_nullable(bg_color)           || ',' ||
+      'hero_title='        || quote_nullable(hero_title)         || ',' ||
+      'hero_subtitle='     || quote_nullable(hero_subtitle)      || ',' ||
+      'footer_columns_json=' || quote_nullable(footer_columns_json) || ',' ||
+      'ban_kick_message='  || quote_nullable(ban_kick_message)   || ',' ||
+      'bridge_api_key='    || quote_nullable(bridge_api_key)     || ',' ||
+      'bridge_allowed_ip=' || quote_nullable(bridge_allowed_ip)  || ',' ||
+      'bridge_backend_url='|| quote_nullable(bridge_backend_url) || ',' ||
+      'email_verification_required=' || email_verification_required::text ||
+      ' WHERE id=1;'
+    FROM site_settings WHERE id=1;" 2>>"$LOG_FILE" | tr -d '\r' || true)
+  if [[ -n "$SETTINGS_SNAPSHOT" ]]; then
+    ok "Сохранён снапшот site_settings"
+    log_file "Settings snapshot SQL: $SETTINGS_SNAPSHOT"
+  else
+    warn "Не удалось сохранить снапшот site_settings (таблица пуста или БД недоступна)"
+  fi
+fi
 
 systemctl stop craftcms >>"$LOG_FILE" 2>&1 || true
 SERVICE_WAS_STOPPED=1
@@ -474,6 +527,33 @@ done
 
 if [[ $HEALTH_OK -eq 1 ]]; then
   ok "Сервис здоров — /api/health отвечает"
+
+  # Restore site_settings from pre-update snapshot. This guards against the
+  # Hibernate DDL edge case where the singleton row is dropped and re-seeded
+  # with defaults (siteName="CraftCMS", colors reset, etc.). Even if the Java
+  # fix prevents it from happening again, the restore ensures a clean recovery
+  # for the current deployment.
+  if [[ -n "$SETTINGS_SNAPSHOT" ]] && \
+     docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^craftcms-postgres$'; then
+    CURRENT_NAME=$(docker exec -i craftcms-postgres psql -U craftcms craftcms -tAc \
+      "SELECT COALESCE(site_name,'') FROM site_settings WHERE id=1;" 2>>"$LOG_FILE" | tr -d '[:space:]' || true)
+    SNAPSHOT_NAME=$(echo "$SETTINGS_SNAPSHOT" | grep -oP "site_name='\K[^']+" || true)
+    if [[ "$CURRENT_NAME" == "CraftCMS" && -n "$SNAPSHOT_NAME" && "$SNAPSHOT_NAME" != "CraftCMS" ]]; then
+      # Row was reset to defaults — restore from snapshot
+      if echo "$SETTINGS_SNAPSHOT" | docker exec -i craftcms-postgres psql -U craftcms craftcms >>"$LOG_FILE" 2>&1; then
+        ok "site_settings восстановлены из снапшота (было сброшено до дефолтов)"
+      else
+        warn "Не удалось восстановить site_settings — проверь лог"
+      fi
+    else
+      # Proactively apply snapshot regardless — idempotent, ensures no field was lost
+      if echo "$SETTINGS_SNAPSHOT" | docker exec -i craftcms-postgres psql -U craftcms craftcms >>"$LOG_FILE" 2>&1; then
+        ok "site_settings синхронизированы из снапшота"
+      else
+        warn "Не удалось синхронизировать site_settings — проверь лог"
+      fi
+    fi
+  fi
 else
   # Rollback
   warn "Новая версия не отвечает — откатываемся к предыдущей"

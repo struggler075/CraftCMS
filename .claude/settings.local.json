@@ -24,7 +24,8 @@
       "Read(//mnt/c/Users/admin/Desktop/**)",
       "Bash(dir \"C:\\\\Users\\\\admin\\\\Desktop\\\\CMSMinecraft\")",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "Bash(xargs grep -l \"api/admin/updates\")"
+      "Bash(xargs grep -l \"api/admin/updates\")",
+      "Bash(git *)"
     ]
   }
 }

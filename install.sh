@@ -821,6 +821,7 @@ print_step "Конфиг бэкенда (Postgres, prod-профиль)"
 cat > "$INSTALL_DIR/application.yml" << APPYML
 server:
   port: ${BACKEND_PORT}
+  address: 0.0.0.0
 
 spring:
   application:
