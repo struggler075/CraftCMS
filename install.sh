@@ -753,16 +753,20 @@ print_step "Сборка серверной части (Backend)"
 mkdir -p "$INSTALL_DIR"/{uploads,logs,frontend,backups/site-settings}
 cd "$SRC_DIR/backend"
 
-# Тёплый прогрев репозитория — отдельно, чтобы понимать что именно тормозит.
-spin_run 600 "Скачивание Maven-зависимостей backend (1-я установка ~3-5 мин)..." "
+# Сборка одним проходом. Ранее здесь стоял отдельный `dependency:go-offline`
+# для прогрева кэша — но он известен багами в Spring Boot проектах (резолвит
+# каждый плагин в каждой фазе lifecycle и часто молча зависает на 10+ минут),
+# а сразу после него тот же `clean package` всё равно скачивал зависимости
+# заново. Один проход с параллельной загрузкой быстрее и стабильнее.
+#
+#   -T 1C                          параллельная сборка (1 thread/CPU)
+#   -Dmaven.artifact.threads=10    параллельная загрузка артефактов
+#   --no-snapshot-updates          не проверять metadata для NON-SNAPSHOT (мы их не используем)
+#   -ntp                           без шумных progress-bar'ов
+spin_run 900 "Компиляция Backend (5-15 мин, на медленной сети дольше)..." "
   JAVA_HOME='$JAVA_HOME_PATH' '$M2_HOME/bin/mvn' \
-    -B -ntp -T 1C dependency:go-offline -DskipTests -fn
-" || print_warn "dependency:go-offline вернул ошибку — продолжаем"
-
-# Сама сборка
-spin_run 600 "Компиляция Backend (5-10 мин)..." "
-  JAVA_HOME='$JAVA_HOME_PATH' '$M2_HOME/bin/mvn' \
-    -B -ntp -T 1C clean package -DskipTests
+    -B -ntp -T 1C -Dmaven.artifact.threads=10 --no-snapshot-updates \
+    clean package -DskipTests
 " || {
   echo ""
   print_fail "Ошибка сборки backend. Последние строки лога:"
@@ -792,7 +796,8 @@ else
 
   if spin_run 300 "Сборка BridgePlugin (макс 5 мин)..." "
     JAVA_HOME='$JAVA_HOME_PATH' '$M2_HOME/bin/mvn' \
-      -B -ntp clean package -DskipTests
+      -B -ntp -Dmaven.artifact.threads=10 --no-snapshot-updates \
+      clean package -DskipTests
   "; then
     BRIDGE_JAR=$(ls target/*.jar 2>/dev/null | grep -v 'original' | head -1)
     if [[ -n "$BRIDGE_JAR" ]]; then
